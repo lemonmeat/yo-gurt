@@ -1,0 +1,8 @@
+# Leader arm -> MuJoCo follower through arm_driver's safety filter, with the live viewer.
+#   uv run honcho -f Procfile.sim-teleop start
+# Closing the viewer window (or Ctrl-C) stops everything. The viewer line is macOS (mjpython);
+# on Linux use `python -m yogurt.viewer`.
+broker: python -m yogurt.broker
+arm_driver: python -m yogurt.arm_driver --backend sim
+viewer: mjpython -m yogurt.viewer
+leader: python -m yogurt.leader
