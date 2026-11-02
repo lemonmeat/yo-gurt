@@ -115,6 +115,19 @@ def test_stop_latches_until_resume():
     assert after.command == held.command
 
 
+def test_repeated_stop_keeps_first_reason_and_fault():
+    f = make()
+    f.step(HOME, {}, 0.0)
+    f.stop("voice")
+    f.stop("repeat")
+    assert f.step(HOME, {}, DT).detail == "voice"
+    f.resume()
+    f.fault("overload")
+    f.stop("repeat")
+    out = f.step(HOME, {}, 2 * DT)
+    assert (out.status, out.detail) == (Safety.FAULT, "overload")
+
+
 def test_sustained_overload_faults_and_holds_measured_pose():
     f = make(max_load_pct={"elbow_flex": 80.0}, load_trip_s=0.3)
     f.step(HOME, {}, 0.0)

@@ -11,6 +11,7 @@ anything safety-relevant is published repeatedly (targets stream, SAFE_STOP re-s
 
 import dataclasses
 import logging
+import time
 
 import msgpack
 import zmq
@@ -86,6 +87,10 @@ class Bus:
             if item is not None:
                 out.append(item)
         return out
+
+    def settle(self, seconds: float = 0.3) -> None:
+        """Wait for fresh connections before a one-shot publish (see the module docstring)."""
+        time.sleep(seconds)
 
     def close(self) -> None:
         self._pub.close(0)

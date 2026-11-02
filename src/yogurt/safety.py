@@ -84,9 +84,10 @@ class SafetyFilter:
         return None
 
     def stop(self, reason: str) -> None:
+        # Keep the first reason (and never downgrade a FAULT): repeats carry less information.
         if self._latch is None:
             log.warning("STOP: %s", reason)
-        self._latch, self._latch_reason = Safety.STOPPED, reason
+            self._latch, self._latch_reason = Safety.STOPPED, reason
 
     def fault(self, reason: str) -> None:
         if self._latch is not Safety.FAULT:
