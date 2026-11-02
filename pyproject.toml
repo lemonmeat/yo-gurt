@@ -39,6 +39,7 @@ select = ["E", "F", "W", "I", "B", "UP", "SIM"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+pythonpath = ["."]
 markers = [
     "sim: needs the SO-ARM100 MuJoCo model (run scripts/fetch_so_arm100.sh)",
 ]

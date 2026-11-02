@@ -1,0 +1,16 @@
+# Raw STS3215 encoder counts (0..4095) at the gripper's mechanical ends, mapped to 0 (closed) and
+# 100 (open). The real backend reads and writes the gripper in raw counts through this map, so the
+# Robonine parallel gripper's 84 mm stroke lands on the full 0..100 range.
+#
+# PLACEHOLDERS until TASKS T2: run `uv run python scripts/gripper_counts.py --arm follower`, close
+# the gripper by hand, note the count, open it fully, note the count, then set measured: true.
+
+follower:
+  closed_counts: 2000
+  open_counts: 3400
+  measured: false
+
+head:  # stock SO-101 gripper; the head never grasps, but the map keeps the driver uniform
+  closed_counts: 2000
+  open_counts: 3000
+  measured: false
