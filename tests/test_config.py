@@ -13,8 +13,7 @@ from yogurt.typed import SchemaError
 def test_shipped_configs_load(name):
     cfg = load_config(DEFAULT_CONFIG_DIR / f"hardware.{name}.yaml")
     assert cfg.name == name
-    for arm in (cfg.follower, cfg.head):
-        assert set(arm.limits.joints) == set(ALL_JOINTS)
+    assert set(cfg.follower.limits.joints) == set(ALL_JOINTS)
     assert cfg.root == DEFAULT_CONFIG_DIR.parent
     assert {"wrist", "scene"} <= set(cfg.cameras)
 

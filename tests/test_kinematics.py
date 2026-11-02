@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from yogurt.config import Box, load_config
+from yogurt.config import DEFAULT_CONFIG_DIR, Box, load_config
 from yogurt.kinematics import Chain, KeepOut, box_signed_distance
 from yogurt.messages import JOINTS
 
@@ -60,7 +60,17 @@ def test_keep_out_box_in_front_of_arm():
 
 
 @needs_model
-def test_shipped_head_zone_is_clear_at_home():
-    chain = Chain.from_config(CFG.follower.fk, URDF)
-    zone = KeepOut(chain, CFG.follower.safety.keep_out, CFG.follower.safety.keep_out_margin_m)
-    assert zone.clearance(dict.fromkeys(JOINTS, 0.0))[0] > 0
+@pytest.mark.parametrize("name", ["laptop", "pi"])
+def test_shipped_keep_out_zones_clear_the_placeholder_poses(name):
+    cfg = load_config(DEFAULT_CONFIG_DIR / f"hardware.{name}.yaml")
+    chain = Chain.from_config(cfg.follower.fk, URDF)
+    zone = KeepOut(chain, cfg.follower.safety.keep_out, cfg.follower.safety.keep_out_margin_m)
+    home = {
+        "shoulder_pan": 0,
+        "shoulder_lift": -80,
+        "elbow_flex": 80,
+        "wrist_flex": 0,
+        "wrist_roll": 0,
+    }
+    for pose in (dict.fromkeys(JOINTS, 0.0), home):
+        assert zone.clearance(pose)[0] > 0

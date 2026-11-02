@@ -10,7 +10,7 @@ bus:
 # 12 V STS3215 arm with the Robonine parallel gripper and the wrist camera. 12 V 5 A supply.
 follower:
   backend: sim  # sim | real; arm_driver --backend overrides
-  port: /dev/tty.usbmodem_FOLLOWER  # TODO: lerobot-find-port
+  port: /dev/tty.usbmodem59700735201  # TODO: lerobot-find-port
   id: yogurt_follower
   calibration_dir: calibration
   rate_hz: 50
@@ -35,36 +35,22 @@ follower:
       gripper: 90
     torque_limit_pct: 80
     keep_out_margin_m: 0.03
-    keep_out:
-      # The head arm and its swept volume. TODO: measure where the head is mounted on the table.
-      - name: head
-        min: [-0.15, 0.20, 0.00]
-        max: [0.10, 0.45, 0.50]
-
-# Extra SO-101 with the stock gripper: carries the scene camera, later the mics. Never the cup.
-head:
-  backend: sim
-  port: /dev/tty.usbmodem_HEAD  # TODO: lerobot-find-port
-  id: yogurt_head
-  calibration_dir: calibration
-  rate_hz: 30
-  torque_off_on_exit: true
-  max_relative_target_deg: 10.0
-  safety:
-    watchdog_s: 0.2
-    load_trip_s: 0.5
-    max_load_pct: {shoulder_pan: 60, shoulder_lift: 80, elbow_flex: 80, wrist_flex: 60, wrist_roll: 60, gripper: 60}
-    torque_limit_pct: 60
+    # Boxes the arm must stay out of, in the follower base frame (metres; +x forward, +y left,
+    # +z up, origin under the shoulder). Shown in the viewer. Example, for a laptop on the desk:
+    #   - name: laptop
+    #     min: [-0.10, 0.20, 0.00]
+    #     max: [0.25, 0.50, 0.25]
+    keep_out: []
 
 # 7.4 V servos on a 5 V supply. Never swap supplies with the follower.
 leader:
-  port: /dev/tty.usbmodem_LEADER  # TODO: lerobot-find-port
+  port: /dev/tty.usbmodem59700722681  # TODO: lerobot-find-port
   id: yogurt_leader
   calibration_dir: calibration
 
 cameras:
   wrist: {device: 0, width: 800, height: 600, fps: 30}  # DFRobot FIT0892, 140 deg. TODO: index
-  scene: {device: 1, width: 800, height: 600, fps: 30}  # DFRobot FIT0729 on the head. TODO: index
+  scene: {device: 1, width: 800, height: 600, fps: 30}  # DFRobot FIT0729, fixed mount. TODO: index
 
 camera_hub:
   backend: opencv  # synthetic: test pattern, no cameras needed

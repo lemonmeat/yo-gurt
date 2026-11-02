@@ -10,7 +10,7 @@ import yaml
 import zmq
 
 from tests.helpers import free_bus_config, wait_for
-from yogurt.arm_driver.driver import FOLLOWER, Driver, make_filter
+from yogurt.arm_driver.driver import Driver, make_filter
 from yogurt.bus import Bus
 from yogurt.config import DEFAULT_CONFIG_DIR, load_config
 from yogurt.devicelock import DeviceBusy, DeviceLock
@@ -49,7 +49,7 @@ def test_driver_loop_in_process(broker):
     ctx = zmq.Context()
     sim = SimBackend(CFG.path(CFG.follower.sim_model), rate_hz=50)
     sim.connect()
-    driver = Driver(FOLLOWER, sim, make_filter(CFG.follower, CFG), Bus(broker, "arm_driver", ctx))
+    driver = Driver(sim, make_filter(CFG.follower, CFG), Bus(broker, "arm_driver", ctx))
     with Bus(broker, "test", ctx) as client:
         client.subscribe("arm/state")
         # Until a target arrives the driver holds.

@@ -1,6 +1,6 @@
 """Calibrate an arm with lerobot-calibrate, using the port and id from the config.
 
-    uv run python scripts/calibrate.py --arm follower|leader|head [--dry-run]
+    uv run python scripts/calibrate.py --arm follower|leader [--dry-run]
 
 Torque is off during calibration. LeRobot asks you to put the arm in the middle of its range
 (that pose becomes 0 degrees), then to move every joint except wrist_roll through its full range.
@@ -22,14 +22,13 @@ from _lerobot import (
 
 def main() -> None:
     p = parser(__doc__)
-    p.add_argument("--arm", required=True, choices=["follower", "leader", "head"])
+    p.add_argument("--arm", required=True, choices=["follower", "leader"])
     args, extra, cfg = parse(p)
 
     if args.arm == "leader":
         device, device_args = cfg.leader, leader_args(cfg.leader, cfg)
     else:
-        arm = getattr(cfg, args.arm)
-        device, device_args = arm, follower_args(arm, cfg)
+        device, device_args = cfg.follower, follower_args(cfg.follower, cfg)
     if not args.dry_run:
         check_port(device.port, args.arm, cfg)
 

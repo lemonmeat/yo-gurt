@@ -163,7 +163,7 @@ class FakeZone:
     """Clearance shrinks as elbow_flex grows; the zone starts at elbow_flex = 30."""
 
     def clearance(self, positions):
-        return (30.0 - positions["elbow_flex"]) / 100.0, "head"
+        return (30.0 - positions["elbow_flex"]) / 100.0, "wall"
 
 
 def test_keep_out_blocks_entering():
@@ -172,7 +172,7 @@ def test_keep_out_blocks_entering():
     out, _ = run(f, 0.0, 100, retarget=lambda t: target(t, elbow_flex=60.0))
     assert out.status == Safety.KEEP_OUT
     assert out.command["elbow_flex"] <= 30.0
-    assert "head" in out.detail
+    assert "wall" in out.detail
 
 
 def test_keep_out_allows_backing_out():

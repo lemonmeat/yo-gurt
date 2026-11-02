@@ -15,8 +15,6 @@ SAMPLES: dict[str, m.Message] = {
         backend="sim",
     ),
     "arm/target": m.JointTarget(positions={"elbow_flex": -20.0}, gripper=None),
-    "head/state": m.JointState(positions={}, gripper=0.0),
-    "head/target": m.JointTarget(positions={"shoulder_pan": 10.0}, gripper=50.0),
     "system/stop": m.Stop(reason="voice"),
     "system/resume": m.Resume(reason="operator"),
     "orchestrator/state": m.OrchestratorState(state="GRASP", previous="CHECK", event="cup_seen"),

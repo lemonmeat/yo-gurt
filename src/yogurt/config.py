@@ -5,7 +5,7 @@ Which hardware file is active:
     YOGURT_HW=laptop|pi     config/hardware.<name>.yaml (default: laptop)
 
 joint_limits.yaml and gripper_map.yaml are read from the same directory as the hardware file and
-merged into the `follower` and `head` sections. Relative paths inside the config are relative to the
+merged into the `follower` section. Relative paths inside the config are relative to the
 repository root, i.e. the config directory's parent; use Config.path() to resolve them.
 
 Laptop and Pi differ only in these files. Code must not branch on the host.
@@ -237,7 +237,6 @@ class Config:
     name: str
     bus: BusConfig
     follower: ArmConfig
-    head: ArmConfig
     leader: LeaderConfig
     cameras: dict[str, CameraConfig]
     camera_hub: CameraHubConfig = field(default_factory=CameraHubConfig)
@@ -280,19 +279,18 @@ def load_config(path: str | Path | None = None) -> Config:
     limits = _read_yaml(path.parent / "joint_limits.yaml")
     grippers = _read_yaml(path.parent / "gripper_map.yaml")
 
-    for arm in ("follower", "head"):
-        section = data.get(arm)
-        if not isinstance(section, dict):
-            raise SchemaError(f"{path}: missing '{arm}' section")
-        for key, source, name in (
-            ("limits", limits, "joint_limits.yaml"),
-            ("gripper_map", grippers, "gripper_map.yaml"),
-        ):
-            if key in section:
-                raise SchemaError(f"{path}: {arm}.{key} belongs in {name}")
-            if arm not in source:
-                raise SchemaError(f"{name}: missing '{arm}' section")
-            section[key] = source[arm]
+    section = data.get("follower")
+    if not isinstance(section, dict):
+        raise SchemaError(f"{path}: missing 'follower' section")
+    for key, source, name in (
+        ("limits", limits, "joint_limits.yaml"),
+        ("gripper_map", grippers, "gripper_map.yaml"),
+    ):
+        if key in section:
+            raise SchemaError(f"{path}: follower.{key} belongs in {name}")
+        if "follower" not in source:
+            raise SchemaError(f"{name}: missing 'follower' section")
+        section[key] = source["follower"]
 
     for key in ("root", "source_path"):
         if key in data:
@@ -301,15 +299,12 @@ def load_config(path: str | Path | None = None) -> Config:
     data["source_path"] = str(path)
 
     cfg = from_dict(Config, data, path=path.name)
-    for arm_name in ("follower", "head"):
-        arm = getattr(cfg, arm_name)
-        missing = set(ALL_JOINTS) - set(arm.limits.joints)
-        extra = set(arm.limits.joints) - set(ALL_JOINTS)
-        if missing or extra:
-            raise SchemaError(
-                f"joint_limits.yaml {arm_name}: missing {sorted(missing)}, unknown {sorted(extra)}"
-            )
-        g = arm.limits.joints[GRIPPER]
-        if g.min < 0 or g.max > 100:
-            raise SchemaError(f"joint_limits.yaml {arm_name}.gripper must stay within 0..100")
+    joints = cfg.follower.limits.joints
+    missing, extra = set(ALL_JOINTS) - set(joints), set(joints) - set(ALL_JOINTS)
+    if missing or extra:
+        raise SchemaError(
+            f"joint_limits.yaml follower: missing {sorted(missing)}, unknown {sorted(extra)}"
+        )
+    if joints[GRIPPER].min < 0 or joints[GRIPPER].max > 100:
+        raise SchemaError("joint_limits.yaml follower.gripper must stay within 0..100")
     return cfg

@@ -1,11 +1,11 @@
-"""The control loop shared by arm_driver (follower) and head_driver (head)."""
+"""arm_driver's control loop: bus in, safety filter, servos, arm/state out."""
 
 import argparse
 import logging
 import time
-from dataclasses import dataclass
 
 from yogurt import cli
+from yogurt.arm_driver import __doc__ as doc
 from yogurt.arm_driver.backend import Backend
 from yogurt.bus import Bus
 from yogurt.config import ArmConfig, Config
@@ -16,20 +16,9 @@ from yogurt.safety import SafetyFilter
 
 log = logging.getLogger(__name__)
 
+NAME = "arm_driver"
 MAX_READ_FAILURES = 5
 REJECT_LOG_PERIOD_S = 2.0
-
-
-@dataclass(frozen=True)
-class Role:
-    name: str  # process name, used as the bus source
-    arm: str  # "follower" | "head": which Config section
-    target_topic: str
-    state_topic: str
-
-
-FOLLOWER = Role("arm_driver", "follower", "arm/target", "arm/state")
-HEAD = Role("head_driver", "head", "head/target", "head/state")
 
 
 def make_filter(arm: ArmConfig, cfg: Config) -> SafetyFilter:
@@ -58,19 +47,18 @@ def make_backend(kind: str, arm: ArmConfig, cfg: Config) -> Backend:
 
 
 class Driver:
-    def __init__(self, role: Role, backend: Backend, safety: SafetyFilter, bus: Bus):
-        self.role = role
+    def __init__(self, backend: Backend, safety: SafetyFilter, bus: Bus):
         self.backend = backend
         self.safety = safety
         self.bus = bus
-        bus.subscribe(role.target_topic, "system/stop", "system/resume")
+        bus.subscribe("arm/target", "system/stop", "system/resume")
         self._status: tuple[Safety, str] | None = None
         self._read_failures = 0
         self._last_reject_log = 0.0
 
     def tick(self, now: float) -> JointState | None:
         for topic, msg in self.bus.drain():
-            if topic == self.role.target_topic:
+            if topic == "arm/target":
                 assert isinstance(msg, JointTarget)
                 reason = self.safety.set_target(msg, now)
                 if reason and now - self._last_reject_log > REJECT_LOG_PERIOD_S:
@@ -112,7 +100,7 @@ class Driver:
             detail=out.detail,
             backend=self.backend.name,
         )
-        self.bus.publish(self.role.state_topic, state)
+        self.bus.publish("arm/state", state)
         return state
 
     def run(self, rate_hz: float) -> None:
@@ -130,12 +118,12 @@ class Driver:
             self.bus.close()
 
 
-def main(role: Role, doc: str, argv: list[str] | None = None) -> None:
+def main(argv: list[str] | None = None) -> None:
     def add_args(p: argparse.ArgumentParser) -> None:
         p.add_argument("--backend", choices=["sim", "real"], help="override the config's backend")
 
-    args, cfg = cli.start(role.name, doc, argv, add_args)
-    arm: ArmConfig = getattr(cfg, role.arm)
+    args, cfg = cli.start(NAME, doc, argv, add_args)
+    arm = cfg.follower
     kind = args.backend or arm.backend
     try:
         safety = make_filter(arm, cfg)
@@ -151,4 +139,4 @@ def main(role: Role, doc: str, argv: list[str] | None = None) -> None:
         arm.rate_hz,
         [b.name for b in arm.safety.keep_out] or "none",
     )
-    Driver(role, backend, safety, Bus(cfg.bus, role.name)).run(arm.rate_hz)
+    Driver(backend, safety, Bus(cfg.bus, NAME)).run(arm.rate_hz)

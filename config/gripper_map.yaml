@@ -10,7 +10,3 @@ follower:
   open_counts: 3400
   measured: false
 
-head:  # stock SO-101 gripper; the head never grasps, but the map keeps the driver uniform
-  closed_counts: 2000
-  open_counts: 3000
-  measured: false

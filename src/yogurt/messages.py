@@ -42,7 +42,7 @@ class Safety(StrEnum):
 
 @dataclass
 class JointState(Message):
-    """arm/state, head/state: published by the driver every control tick."""
+    """arm/state: published by arm_driver every control tick."""
 
     positions: dict[str, float]  # body joints, degrees
     gripper: float  # 0 closed .. 100 open
@@ -56,7 +56,7 @@ class JointState(Message):
 
 @dataclass
 class JointTarget(Message):
-    """arm/target, head/target. Joints left out keep their previous target."""
+    """arm/target. Joints left out keep their previous target."""
 
     positions: dict[str, float] = field(default_factory=dict)  # body joints, degrees
     gripper: float | None = None  # 0 closed .. 100 open; None keeps the previous target
@@ -64,7 +64,7 @@ class JointTarget(Message):
 
 @dataclass
 class Stop(Message):
-    """system/stop: every driver latches into a hold. Any process may publish it."""
+    """system/stop: arm_driver latches into a hold. Any process may publish it."""
 
     reason: str = ""
 
@@ -130,7 +130,7 @@ class StopHeard(Message):
 
 @dataclass
 class Bearing(Message):
-    """audio/bearing: direction of a voice or a loud noise, in the head base frame."""
+    """audio/bearing: direction of a voice or a loud noise, in the follower base frame."""
 
     azimuth_deg: float
     kind: str  # "voice" | "loud"
@@ -205,8 +205,6 @@ class DevKey(Message):
 TOPICS: dict[str, type[Message]] = {
     "arm/state": JointState,
     "arm/target": JointTarget,
-    "head/state": JointState,
-    "head/target": JointTarget,
     "system/stop": Stop,
     "system/resume": Resume,
     "orchestrator/state": OrchestratorState,

@@ -34,28 +34,11 @@ follower:
     torque_limit_pct: 80
     keep_out_margin_m: 0.03
     keep_out:
-      # On the backpack the head sits next to the follower, and the wearer is behind both.
-      # TODO: measure both boxes on the mounted frame (Phase 3).
-      - name: head
-        min: [-0.15, 0.20, 0.00]
-        max: [0.10, 0.45, 0.50]
+      # On the backpack the wearer's head and body are behind the arm.
+      # TODO: measure on the mounted frame (Phase 3).
       - name: wearer
         min: [-0.60, -0.40, -0.60]
         max: [-0.08, 0.40, 0.40]
-
-head:
-  backend: real
-  port: /dev/serial/by-id/TODO-head
-  id: yogurt_head
-  calibration_dir: calibration
-  rate_hz: 30
-  torque_off_on_exit: true
-  max_relative_target_deg: 10.0
-  safety:
-    watchdog_s: 0.2
-    load_trip_s: 0.5
-    max_load_pct: {shoulder_pan: 60, shoulder_lift: 80, elbow_flex: 80, wrist_flex: 60, wrist_roll: 60, gripper: 60}
-    torque_limit_pct: 60
 
 leader:  # usually stays on the laptop; listed so scripts work on the Pi too
   port: /dev/serial/by-id/TODO-leader

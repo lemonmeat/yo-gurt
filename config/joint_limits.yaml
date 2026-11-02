@@ -1,4 +1,4 @@
-# Joint limits enforced by arm_driver / head_driver's safety filter.
+# Joint limits enforced by arm_driver's safety filter.
 #
 # Units: degrees in LeRobot's calibrated frame (use_degrees=True, 0 = middle of the range recorded
 # during calibration); max_velocity in deg/s. The gripper is 0 (closed) .. 100 (open), %/s.
@@ -17,13 +17,3 @@ follower:
     wrist_roll:    {min: -150.0, max: 150.0, max_velocity: 120.0}
     gripper:       {min: 0.0, max: 100.0, max_velocity: 150.0}
 
-# The head carries the scene camera (and later the mics). It only looks around, so keep it slow.
-head:
-  measured: false
-  joints:
-    shoulder_pan:  {min: -90.0, max: 90.0, max_velocity: 60.0}
-    shoulder_lift: {min: -60.0, max: 60.0, max_velocity: 60.0}
-    elbow_flex:    {min: -60.0, max: 60.0, max_velocity: 60.0}
-    wrist_flex:    {min: -90.0, max: 90.0, max_velocity: 90.0}
-    wrist_roll:    {min: -90.0, max: 90.0, max_velocity: 90.0}
-    gripper:       {min: 0.0, max: 100.0, max_velocity: 100.0}
