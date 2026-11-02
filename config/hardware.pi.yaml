@@ -18,7 +18,7 @@ follower:
   max_relative_target_deg: 10.0
   fk:
     urdf: third_party/SO-ARM100/Simulation/SO101/so101_new_calib.urdf
-    tool_offset: [0.0, 0.0, 0.0]  # TODO: copy from the laptop config once measured
+    tool_offset: [0.0, 0.0, 0.0]  # zero for the stock gripper
     joint_sign: {}
     joint_offset_deg: {}
   safety:

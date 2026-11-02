@@ -4,8 +4,8 @@
 
 Torque is off during calibration. LeRobot asks you to put the arm in the middle of its range
 (that pose becomes 0 degrees), then to move every joint except wrist_roll through its full range.
-For the follower, open and close the Robonine gripper all the way so the calibration's gripper
-range matches gripper_map.yaml. The file lands in calibration/<id>.json; commit it so the Pi uses
+Open and close the gripper all the way so the calibration's gripper range matches
+gripper_map.yaml. The file lands in calibration/<id>.json; commit it so the Pi uses
 the same calibration.
 """
 

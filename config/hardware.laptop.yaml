@@ -7,7 +7,7 @@ bus:
   pub: tcp://127.0.0.1:5550
   sub: tcp://127.0.0.1:5551
 
-# 12 V STS3215 arm with the Robonine parallel gripper and the wrist camera. 12 V 5 A supply.
+# 12 V STS3215 arm with the stock SO-101 gripper and the wrist camera. 12 V 5 A supply.
 follower:
   backend: sim  # sim | real; arm_driver --backend overrides
   port: /dev/tty.usbmodem59700735201  # TODO: lerobot-find-port
@@ -19,7 +19,7 @@ follower:
   max_relative_target_deg: 10.0
   fk:
     urdf: third_party/SO-ARM100/Simulation/SO101/so101_new_calib.urdf
-    # Robonine fingertip relative to the stock gripper_frame_link. TODO: measure on the arm.
+    # Fingertip offset from the URDF's gripper_frame_link: zero for the stock gripper.
     tool_offset: [0.0, 0.0, 0.0]
     joint_sign: {}
     joint_offset_deg: {}

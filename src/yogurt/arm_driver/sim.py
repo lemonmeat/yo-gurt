@@ -1,8 +1,9 @@
 """MuJoCo backend: SO-ARM100's Simulation/SO101 model, stepped one control period per write().
 
 The model's joint zero is the middle of each joint's range, like LeRobot's degrees, so the mapping
-is the same FkConfig sign/offset the safety filter uses. The model has the stock gripper; percent
-maps linearly onto its actuator range (0 = closed end).
+is the same FkConfig sign/offset the safety filter uses. The model's gripper is the stock SO-101
+gripper, the same one on the real follower; percent maps linearly onto its actuator range
+(0 = closed end).
 """
 
 import math
