@@ -64,6 +64,7 @@ class SimBackend:
         self.data = mujoco.MjData(self.model)
         self.joints = JointMap(self.model, fk)
         self._act = {j: self.model.actuator(j).id for j in ALL_JOINTS}
+        self._dof = {j: int(self.model.joint(j).dofadr[0]) for j in ALL_JOINTS}
         self._force_max = {
             j: float(np.abs(self.model.actuator_forcerange[a]).max()) for j, a in self._act.items()
         }
@@ -81,10 +82,11 @@ class SimBackend:
             j: self.joints.from_model(j, float(self.data.qpos[a]))
             for j, a in self.joints.qadr.items()
         }
-        loads = {
-            j: 100.0 * float(self.data.actuator_force[a]) / self._force_max[j]
-            for j, a in self._act.items()
-        }
+        # Load = the torque needed to hold the pose against gravity and contacts, like a servo's
+        # Present_Load. Not the actuator force: the model's position actuators are so stiff they
+        # saturate at ~0.2 deg of error, so their force reads 100% during any motion.
+        static = self.data.qfrc_bias - self.data.qfrc_constraint
+        loads = {j: 100.0 * float(static[d]) / self._force_max[j] for j, d in self._dof.items()}
         temps = dict.fromkeys(ALL_JOINTS, SIM_TEMPERATURE_C)
         return Reading(positions, loads, temps)
 
