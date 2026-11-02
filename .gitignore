@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+
+# Fetched third-party assets (scripts/fetch_so_arm100.sh)
+third_party/
+
+# Training and run artifacts
+outputs/
+datasets/
+checkpoints/
+wandb/
+logs/
+*.ckpt
+*.safetensors
+*.pt
+*.pth
+*.onnx
+*.hef
+models/
+
+# Media
+media/
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.wav
+*.flac
+*.mp3
+*.jpg
+*.jpeg
+*.png
+!docs/**/*.png
+!docs/**/*.jpg
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+*.swp
+.env
