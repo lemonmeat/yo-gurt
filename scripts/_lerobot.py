@@ -14,6 +14,7 @@ import sys
 from contextlib import ExitStack
 from pathlib import Path
 
+from yogurt.calibration import RECALIBRATE_HINT, calibration_problems
 from yogurt.config import ENV_VAR, ArmConfig, Config, LeaderConfig, load_config
 from yogurt.devicelock import DeviceBusy, DeviceLock
 
@@ -56,10 +57,22 @@ def check_port(port: str, what: str, cfg: Config) -> None:
         )
 
 
+def calibration_path(device: ArmConfig | LeaderConfig, cfg: Config) -> Path:
+    return cfg.path(device.calibration_dir) / f"{device.id}.json"
+
+
 def check_calibrated(device: ArmConfig | LeaderConfig, cfg: Config, arm: str) -> None:
-    path = cfg.path(device.calibration_dir) / f"{device.id}.json"
+    path = calibration_path(device, cfg)
     if not path.exists():
         fail(f"no calibration at {path}. Run: uv run python scripts/calibrate.py --arm {arm}")
+    problems = calibration_problems(path)
+    if problems:
+        fail(
+            f"{path.name} looks wrong:\n  "
+            + "\n  ".join(problems)
+            + "\n"
+            + RECALIBRATE_HINT.replace("<arm>", arm)
+        )
 
 
 def follower_args(arm: ArmConfig, cfg: Config, prefix: str = "robot") -> list[str]:
@@ -97,11 +110,11 @@ def cameras_arg(cfg: Config, names: list[str]) -> str:
     return f"--robot.cameras={json.dumps(cams)}"
 
 
-def run(cmd: list[str], devices: list[str | int], dry_run: bool) -> None:
-    """Print and run `cmd` while holding a DeviceLock on each device."""
+def run(cmd: list[str], devices: list[str | int], dry_run: bool) -> int:
+    """Print and run `cmd` while holding a DeviceLock on each device. Returns its exit code."""
     print("$ " + shlex.join(cmd), flush=True)
     if dry_run:
-        return
+        return 0
     try:
         with ExitStack() as stack:
             for device in devices:
@@ -111,4 +124,4 @@ def run(cmd: list[str], devices: list[str | int], dry_run: bool) -> None:
         fail(f"{e}. Stop it first (honcho, arm_driver, camera_hub, or another script).")
     except KeyboardInterrupt:
         code = 130
-    raise SystemExit(code)
+    return code

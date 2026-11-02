@@ -92,3 +92,25 @@ def test_gripper_map_handles_reversed_direction():
     g = GripperMap(closed_counts=3000, open_counts=2000)
     assert g.to_percent(2900) == pytest.approx(10.0)
     assert g.to_counts(10.0) == 2900
+
+
+def _calibration(tmp_path, **ranges):
+    import json
+
+    data = {
+        name: {"id": i + 1, "drive_mode": 0, "homing_offset": 0, "range_min": lo, "range_max": hi}
+        for i, (name, (lo, hi)) in enumerate(ranges.items())
+    }
+    path = tmp_path / "arm.json"
+    path.write_text(json.dumps(data))
+    return path
+
+
+def test_calibration_check_flags_wrapped_joints(tmp_path):
+    from yogurt.calibration import calibration_problems
+
+    sane = _calibration(tmp_path, shoulder_lift=(820, 3290), wrist_roll=(0, 4095))
+    assert calibration_problems(sane) == []
+    wrapped = _calibration(tmp_path, shoulder_lift=(3, 4094), gripper=(1967, 3395))
+    problems = calibration_problems(wrapped)
+    assert len(problems) == 1 and "shoulder_lift" in problems[0]

@@ -11,6 +11,7 @@ import logging
 import time
 
 from yogurt.arm_driver.backend import Reading
+from yogurt.calibration import RECALIBRATE_HINT, calibration_problems
 from yogurt.config import ArmConfig, Config
 from yogurt.devicelock import DeviceLock
 from yogurt.messages import ALL_JOINTS, GRIPPER, JOINTS
@@ -68,6 +69,10 @@ class RealBackend:
                 f"no calibration for {self.arm.id} in {self.arm.calibration_dir}; "
                 "run scripts/calibrate.py first"
             )
+        problems = calibration_problems(self.robot.calibration_fpath)
+        if problems:
+            hint = RECALIBRATE_HINT.replace("<arm>", "follower")
+            raise RuntimeError(f"{'; '.join(problems)}. {hint}")
         # calibrate=False: never start interactive calibration inside the driver. connect() also
         # writes PID gains and the gripper's torque/current caps (LeRobot's configure()).
         self.robot.connect(calibrate=False)

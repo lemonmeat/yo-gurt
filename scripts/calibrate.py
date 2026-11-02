@@ -10,6 +10,7 @@ the same calibration.
 """
 
 from _lerobot import (
+    calibration_path,
     check_port,
     follower_args,
     leader_args,
@@ -18,6 +19,8 @@ from _lerobot import (
     parser,
     run,
 )
+
+from yogurt.calibration import MIDDLE_POSE, RECALIBRATE_HINT, calibration_problems
 
 
 def main() -> None:
@@ -33,7 +36,18 @@ def main() -> None:
         check_port(device.port, args.arm, cfg)
 
     print(f"Calibrating {args.arm} ({device.id} on {device.port}). Torque stays off.")
-    run([lerobot_cli("calibrate"), *device_args, *extra], [device.port], args.dry_run)
+    print(f"When LeRobot asks for the middle of the range, put {MIDDLE_POSE}.")
+    code = run([lerobot_cli("calibrate"), *device_args, *extra], [device.port], args.dry_run)
+    path = calibration_path(device, cfg)
+    if code == 0 and not args.dry_run and path.exists():
+        problems = calibration_problems(path)
+        if problems:
+            print(f"\nWARNING: {path.name} looks wrong:\n  " + "\n  ".join(problems))
+            print(RECALIBRATE_HINT.replace("<arm>", args.arm))
+            code = 1
+        else:
+            print(f"{path.name} looks sane. Commit it so the Pi uses the same calibration.")
+    raise SystemExit(code)
 
 
 if __name__ == "__main__":

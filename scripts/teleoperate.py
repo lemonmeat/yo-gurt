@@ -71,7 +71,7 @@ def main() -> None:
         "Ctrl-C stops; the follower then goes limp, so support it."
     )
     devices = [follower.port, leader.port] + [f"camera-{cfg.cameras[c].device}" for c in cameras]
-    run(cmd, devices, args.dry_run)
+    raise SystemExit(run(cmd, devices, args.dry_run))
 
 
 if __name__ == "__main__":
