@@ -10,7 +10,11 @@ from pathlib import Path
 from yogurt.config import ENV_VAR, Config, load_config
 
 
-def _raise_interrupt(signum, frame):
+def _shutdown(signum, frame):
+    # Only the first signal counts. honcho sends SIGINT then SIGTERM, and `uv run` forwards
+    # signals to its child, so repeats would otherwise interrupt the cleanup itself.
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
     raise KeyboardInterrupt
 
 
@@ -20,10 +24,10 @@ def start(
     argv: list[str] | None = None,
     add_args: Callable[[argparse.ArgumentParser], None] | None = None,
 ) -> tuple[argparse.Namespace, Config]:
-    """Parse args, set up logging, load config, and turn SIGTERM into KeyboardInterrupt.
+    """Parse args, set up logging, load config, and turn SIGINT/SIGTERM into KeyboardInterrupt.
 
-    Every process cleans up in `except KeyboardInterrupt` / `finally`, so honcho's and systemd's
-    SIGTERM get the same orderly shutdown as Ctrl-C.
+    Every process cleans up in `except KeyboardInterrupt` / `finally`, so Ctrl-C, honcho and
+    systemd all get the same orderly shutdown. If cleanup hangs, they escalate to SIGKILL.
     """
     parser = argparse.ArgumentParser(prog=f"python -m yogurt.{name}", description=description)
     parser.add_argument(
@@ -44,7 +48,8 @@ def start(
         format=f"%(asctime)s.%(msecs)03d {name} %(levelname)s %(name)s: %(message)s",
         datefmt="%H:%M:%S",
     )
-    signal.signal(signal.SIGTERM, _raise_interrupt)
+    signal.signal(signal.SIGINT, _shutdown)
+    signal.signal(signal.SIGTERM, _shutdown)
     cfg = load_config(args.config)
     logging.getLogger(name).info("config %s (%s)", cfg.source_path, cfg.name)
     return args, cfg

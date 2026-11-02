@@ -1,0 +1,7 @@
+# SIM PLACEHOLDER. Re-teach on the real arm: uv run python scripts/teach_poses.py --task handoff
+# Holds the cup out in front at about 30 cm. Phase 2 replaces this with ACT or a pose toward the
+# speaker's bearing.
+task: handoff
+source: sim
+waypoints:
+  - {duration_s: 2.5, positions: {shoulder_pan: 0, shoulder_lift: -35, elbow_flex: 5, wrist_flex: 25, wrist_roll: 0}}
