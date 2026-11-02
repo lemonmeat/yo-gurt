@@ -105,6 +105,10 @@ class SafetyConfig:
     load_trip_s: float = 0.5
     # Written to each servo's Torque_Limit register at connect (real backend).
     torque_limit_pct: float = 80.0
+    # The command never runs further than this ahead of the measured position, so a blocked joint
+    # doesn't wind up and then jump when released. For the gripper this also bounds the squeeze.
+    max_tracking_error_deg: float = 20.0
+    max_gripper_tracking_error: float = 30.0
     keep_out: list[Box] = field(default_factory=list)
     keep_out_margin_m: float = 0.03
 
