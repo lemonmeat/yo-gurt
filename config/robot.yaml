@@ -1,0 +1,64 @@
+# Behaviour shared by every computer: motion limits, timings, thresholds.
+# Machine-specific wiring (ports, cameras, model files) is in hardware_<machine>.yaml,
+# taught poses are in poses.yaml.
+
+arm:
+  rate_hz: 30
+  speed_dps: 40           # scripted moves (deg/s)
+  max_speed_dps: 150      # ceiling for anything streamed: ACT actions, leader teleop
+  gripper_speed: 200      # % of travel per second
+  limit_margin_deg: 3     # stay this far inside the calibrated joint range
+  max_lead_deg: 15        # the command may lead the measured position by at most this much
+  tolerance_deg: 3        # "arrived" when every joint is this close
+  max_temp_c: 62          # release torque if any servo gets this hot
+
+# How the base camera (and its microphones) sit relative to the arm.
+base_camera:
+  yaw_deg: 0              # shoulder_pan angle at which the arm points where the base camera looks
+  pan_sign: 1             # +1: something on the right of the base picture needs a larger pan angle
+
+mic:
+  spacing_m: 0.06         # distance between the two microphone holes on the base camera
+  flip: false             # true if a voice on the left shows up on the right of the overlay
+  speech_rms: 0.012       # loudness (0..1) above which a 30 ms slice counts as speech
+
+wake:
+  threshold: null         # null = use the threshold saved with the trained model
+  frames: 2               # consecutive 100 ms windows above threshold needed to fire
+
+listen:
+  pre_roll_s: 0.2         # audio kept from just before the wake word fired
+  no_speech_timeout_s: 4  # nothing said after the wake word -> back to Idle
+  end_silence_s: 0.9      # this much quiet ends the command
+  max_command_s: 8
+  follow_speed_dps: 60    # how fast the arm turns to face the voice
+  audio_sigma_deg: 20     # how far a face may sit from the audio bearing and still be the speaker
+
+check:
+  pan_min_deg: -90        # sweep range, as in Movement_mvp.py
+  pan_max_deg: 90
+  sweep_speed_dps: 20
+  confidence: 0.35        # detector score needed to count as a yogurt cup
+  confirm_frames: 3       # consecutive detections before the sweep stops
+  center_tolerance: 0.04  # centred when the cup is within this fraction of the picture width
+  center_timeout_s: 8
+  pan_sign: 1             # +1: a cup on the right of the wrist picture needs a larger pan angle
+
+grasp:
+  task: Grab the yogurt cup.   # task string stored with the demonstrations
+  fps: 30
+  duration_s: 12          # how long the ACT policy runs before Verify
+  closed_below: 35        # gripper % under which the hand counts as closed around the cup
+  image_width: 640        # wrist frames are resized to this for demos and for the policy
+  image_height: 360
+
+verify:
+  threshold: 0.6          # P(held) needed
+  window_s: 1.0           # averaged over this long
+
+handoff:
+  timeout_s: 10           # nobody takes it -> put it back
+  threshold: 0.7          # P(grabbed) needed ...
+  hold_s: 0.4             # ... for this long before letting go
+  release_wait_s: 1.5     # keep still after opening, so the cup is clear before retracting
+  max_face_shift_deg: 30  # a face this close to the remembered bearing is the same person

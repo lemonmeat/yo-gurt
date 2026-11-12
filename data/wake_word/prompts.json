@@ -1,0 +1,39 @@
+{
+  "positive": [
+    "Yo, gurt",
+    "Yo, gurt … give me the yogurt",
+    "Yo gurt (quietly)",
+    "YO, GURT (loudly)",
+    "Yo… gurt (slowly)",
+    "Yo gurt (fast)",
+    "Yo, gurt … give him the yogurt"
+  ],
+  "negative": [
+    "yogurt",
+    "give me the yogurt",
+    "give him the yogurt",
+    "yo",
+    "gurt",
+    "yoga",
+    "yo, girl",
+    "your gut",
+    "you hurt",
+    "yo, Kurt",
+    "yoghurt, please",
+    "hey, Google",
+    "go get it",
+    "yo, what's up",
+    "your shirt",
+    "I'll go first",
+    "frozen yogurt",
+    "you guys heard",
+    "okay, good",
+    "the yogurt is on the table"
+  ],
+  "background": [
+    "(say nothing: just the room)",
+    "(normal conversation nearby)",
+    "(move the arm from the UI while recording: servo noise)",
+    "(typing, chairs, doors, music if there will be any at the demo)"
+  ]
+}

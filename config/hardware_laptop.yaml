@@ -1,0 +1,61 @@
+# Hardware as seen from the laptop.  Run with:  uv run yogurt laptop
+# Everything that is the same on every computer (poses, timings, thresholds) lives in robot.yaml.
+
+web:
+  host: 127.0.0.1        # local testing only; use 0.0.0.0 to reach it from other machines
+  port: 8080
+  user: gurt
+  password: gurt
+
+arm:
+  # auto = the only USB serial adapter plugged in (after excluding leader.port).
+  # sim  = no hardware: a simulated arm, so the UI and state machine can be tested anywhere.
+  # Or an explicit path, e.g. /dev/tty.usbmodem5A460851011 (find it with `lerobot-find-port`).
+  port: auto
+  calibration: config/arm_config.json
+
+leader:
+  # Leader arm, only needed to record grasp demonstrations. null = not attached.
+  port: null
+  calibration: config/leader_config.json   # written by lerobot-calibrate, see data/grasp_act/README.md
+
+cameras:
+  # device: a name (matched loosely, so "Integrated Webcam" also finds Integrated_Webcam_HD),
+  # an OpenCV index, or a /dev/video* path.
+  wrist:
+    device: Integrated Webcam   # wide-angle DSJ-2062-309 on the gripper, NOT the laptop's own webcam
+    width: 1280
+    height: 720
+    fps: 30
+    rotate: 0                   # degrees clockwise to make the picture upright: 0, 90, 180, 270
+    hfov_deg: 120               # horizontal field of view
+  base:
+    device: UC60                # high-res DSJ-3079-HE on the base
+    width: 1280
+    height: 720
+    fps: 30
+    rotate: 0
+    hfov_deg: 80
+
+mic:
+  device: UC60                  # the base camera's stereo microphones
+  sample_rate: 48000
+
+# Where each model runs. A model path ending in .onnx runs on the CPU (onnxruntime);
+# a path ending in .hef runs on the Hailo AI HAT+.
+models:
+  wake_word: models/wake_word.onnx
+  yogurt_detector: models/yogurt_detector.onnx
+  grasp_verify: models/grasp_verify.onnx
+  handoff_grab: models/handoff_grab.onnx
+  act_grasp: models/act_grasp           # LeRobot pretrained_model directory
+  act_device: cpu                       # cpu | mps | cuda (on an M3 the CPU was faster than mps for ACT)
+
+asr:
+  model: base.en          # faster-whisper model name
+  compute_type: int8
+
+slm:
+  # Any Ollama-compatible server: Ollama itself, or hailo-ollama on an AI HAT+ 2.
+  url: http://127.0.0.1:11434
+  model: gemma3:1b

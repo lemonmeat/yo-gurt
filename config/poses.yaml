@@ -1,0 +1,24 @@
+# Taught arm poses, in LeRobot degrees (gripper: 0 closed .. 100 open).
+# Re-teach any of them from the Arm panel of the UI; that rewrites this file.
+# handoff: its gripper value is ignored (the gripper keeps holding the cup).
+idle:
+  shoulder_pan: 0.0
+  shoulder_lift: -80.0
+  elbow_flex: 75.0
+  wrist_flex: 5.0
+  wrist_roll: 0.0
+  gripper: 0.0
+survey:
+  shoulder_pan: 0.0
+  shoulder_lift: -60.0
+  elbow_flex: -5.0
+  wrist_flex: 80.0
+  wrist_roll: 0.0
+  gripper: 70.0
+handoff:
+  shoulder_pan: 0.0
+  shoulder_lift: 50.0
+  elbow_flex: -85.0
+  wrist_flex: 35.0
+  wrist_roll: 0.0
+  gripper: 0.0

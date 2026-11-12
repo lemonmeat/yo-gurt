@@ -1,0 +1,43 @@
+{
+  "grasp_verify/held": [
+    "cup held, arm still in the Verify pose (normal room light)",
+    "cup held a little crooked / gripped higher or lower than usual",
+    "cup held, a different yogurt flavour or label side facing the camera",
+    "cup held, lights dimmer or a shadow across the table",
+    "cup held, cluttered background (other objects on the table)",
+    "cup held, people moving in the background"
+  ],
+  "grasp_verify/empty": [
+    "gripper closed on nothing, cup still on the table in view",
+    "gripper closed on nothing, no cup in view",
+    "gripper half open, empty",
+    "empty gripper, cluttered table, other cups or mugs in view",
+    "empty gripper, lights dimmer or a shadow across the table",
+    "empty gripper, a hand or arm passing through the picture"
+  ],
+  "handoff_grab/grabbed": [
+    "one hand wrapped firmly around the cup, from the front",
+    "hand holding the cup from the left, then from the right",
+    "hand holding the cup from above (fingers over the lid) and from below",
+    "different people: large and small hands, sleeves, a watch, a glove if likely",
+    "two hands on the cup",
+    "holding and gently pulling, as someone impatient would"
+  ],
+  "handoff_grab/not_grabbed": [
+    "cup held out, nobody near",
+    "a hand approaching but not touching yet",
+    "a hand hovering right next to the cup, fingers open",
+    "fingers touching or tapping the cup without gripping it",
+    "people walking past and gesturing in the background",
+    "a face close to the camera, looking at the cup"
+  ],
+  "yogurt_detection/images": [
+    "cup on the table at many distances and positions while the arm sweeps left to right in the survey pose",
+    "cup rotated: every side of the label, lid towards and away from the camera",
+    "cup near the edges of the picture (the wide lens stretches it there)",
+    "other flavours / brands of yogurt you may use at the demo",
+    "cluttered table: mugs, bottles, bowls next to the cup (these teach it what is NOT yogurt)",
+    "no cup at all: empty table and clutter only (label these 'No yogurt')",
+    "different lighting, and the venue where the demo will be if you can"
+  ]
+}

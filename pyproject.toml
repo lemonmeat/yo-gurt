@@ -1,0 +1,47 @@
+[project]
+name = "yogurt"
+version = "0.2.0"
+description = "Yo-gurt: a voice-and-vision SO-101 arm that picks up a yogurt and hands it to whoever asked."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "lerobot[feetech,dataset]>=0.6.1,<0.7", # arm bus, ACT policy, demo datasets (brings torch + opencv)
+    "aiohttp>=3.9",                         # web UI
+    "pyyaml>=6.0",
+    "sounddevice>=0.5",                     # stereo mic capture (PortAudio)
+    "faster-whisper>=1.1",                  # speech-to-text for the spoken command
+    "onnxruntime>=1.20",                    # CPU inference for every model we train
+]
+
+[project.optional-dependencies]
+# Only needed on the machine that trains/exports models (laptop or GPU box), never on the Pi.
+train = [
+    "lerobot[training]>=0.6.1,<0.7", # lerobot-train for ACT
+    "ultralytics>=8.3.100",          # yogurt detector: open-vocabulary export + fine-tuning
+    "onnx>=1.17",
+    "onnxscript>=0.2",
+]
+
+[project.scripts]
+yogurt = "yogurt.app:main"
+
+[dependency-groups]
+dev = ["pytest>=8.3", "ruff>=0.8"]
+
+[build-system]
+requires = ["uv_build>=0.9,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv]
+# ultralytics asks for opencv-python, which overwrites the headless build lerobot pins. One cv2 only.
+exclude-dependencies = ["opencv-python"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
