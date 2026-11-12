@@ -1,7 +1,0 @@
-# SIM PLACEHOLDER. Re-teach on the real arm: uv run python scripts/teach_poses.py --task release_home
-# Opens the gripper where it is, then folds back to home.
-task: release_home
-source: sim
-waypoints:
-  - {duration_s: 1.0, gripper: 100}
-  - {duration_s: 2.5, positions: {shoulder_pan: 0, shoulder_lift: -80, elbow_flex: 80, wrist_flex: 0, wrist_roll: 0}, gripper: 50}
