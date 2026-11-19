@@ -2,19 +2,24 @@
 
 Base camera:  every face with its role (REQUESTER / OTHER / TARGET) and mouth movement, the direction
               the microphones hear the voice from, and where the arm is pointing.
+              In the hand-off pose, the square the hand-off model looks at.
 Wrist camera: yogurt detections, how far the cup is from the centre line, and the live answers of the
               grasp-verification and hand-off models.
-"""
 
-import math
+The state and its 'why' sentence are not drawn here: the pages show them as text next to the feeds,
+where they stay sharp (OpenCV's font blurs once the JPEG is scaled in the browser).
+"""
 
 import cv2
 import numpy as np
 
+from . import vision
+
 STREAM_WIDTH = 800
-WHITE, GREY, BLACK = (255, 255, 255), (170, 170, 170), (0, 0, 0)
-GREEN, BLUE, YELLOW = (90, 210, 90), (230, 160, 60), (0, 220, 255)
-MAGENTA, ORANGE, RED = (220, 90, 230), (0, 150, 255), (60, 60, 240)
+# The web pages' palette (Tailwind colours), in OpenCV's BGR order.
+WHITE, GREY, BLACK = (255, 255, 255), (175, 163, 156), (0, 0, 0)
+GREEN, BLUE, YELLOW = (94, 197, 34), (246, 130, 59), (11, 158, 245)
+MAGENTA, ORANGE, RED = (239, 70, 217), (22, 115, 249), (68, 68, 239)
 FONT = cv2.FONT_HERSHEY_SIMPLEX
 
 
@@ -34,25 +39,6 @@ def _bar(img, name: str, value: float, threshold: float, row: int) -> None:
     _label(img, f"{name} {value:.2f}", x + w + 8, y + 12)
 
 
-PLAIN = str.maketrans({"°": " deg", "“": '"', "”": '"', "…": "...", "’": "'", "‘": "'", "–": "-", "—": "-"})
-
-
-def _banner(img, brain) -> None:
-    """State and the current 'why' sentence across the top."""
-    detail = brain.detail.translate(PLAIN).encode("ascii", "ignore").decode()  # OpenCV's font is ASCII-only
-    words, lines, line = detail.split(), [], ""
-    for word in words:
-        if len(line) + len(word) > 88:
-            lines.append(line)
-            line = ""
-        line = f"{line} {word}".strip()
-    lines = (lines + [line])[:3]
-    cv2.rectangle(img, (0, 0), (img.shape[1], 30 + 18 * len(lines)), BLACK, -1)
-    cv2.putText(img, brain.state.replace("_", " "), (8, 21), FONT, 0.7, YELLOW, 2, cv2.LINE_AA)
-    for i, text in enumerate(lines):
-        cv2.putText(img, text, (8, 42 + 18 * i), FONT, 0.45, WHITE, 1, cv2.LINE_AA)
-
-
 def _shrink(frame: np.ndarray) -> tuple[np.ndarray, float]:
     scale = STREAM_WIDTH / frame.shape[1]
     return cv2.resize(frame, (STREAM_WIDTH, round(frame.shape[0] * scale)), interpolation=cv2.INTER_AREA), scale
@@ -67,10 +53,9 @@ def no_signal(name: str, error: str | None) -> np.ndarray:
 def draw_base(frame: np.ndarray, brain) -> np.ndarray:
     img, scale = _shrink(frame)
     height, width = img.shape[:2]
-    focal = (width / 2) / math.tan(math.radians(brain.cfg.cameras.base.hfov_deg) / 2)
 
     def column(bearing: float) -> int:
-        return int(width / 2 + focal * math.tan(math.radians(max(-85.0, min(85.0, bearing)))))
+        return int(vision.column_for(bearing, width, brain.cfg.cameras.base.hfov_deg))
 
     request = brain.request
     others = {p.id for p in request.others}
@@ -92,7 +77,7 @@ def draw_base(frame: np.ndarray, brain) -> np.ndarray:
         _label(img, "mouth", x + w + 6, y + h + 12, colour, 0.4)
 
     if (voice := brain.view.get("voice")) is not None:
-        cv2.line(img, (column(voice), 80), (column(voice), height), MAGENTA, 2)
+        cv2.line(img, (column(voice), 0), (column(voice), height), MAGENTA, 2)
         _label(img, f"voice {voice:+.0f} deg", column(voice) + 6, height - 30, MAGENTA)
     if request.target is not None and brain.state in ("CHECK", "GRASP", "VERIFY", "HANDOFF"):
         x = column(request.target.bearing)
@@ -102,7 +87,12 @@ def draw_base(frame: np.ndarray, brain) -> np.ndarray:
     aim = (brain.arm.pos["shoulder_pan"] - brain.cfg.base_camera.yaw_deg) * brain.cfg.base_camera.pan_sign
     cv2.drawMarker(img, (column(aim), height - 12), ORANGE, cv2.MARKER_TRIANGLE_UP, 20, 2)
     _label(img, "arm", column(aim) + 14, height - 6, ORANGE, 0.45)
-    _banner(img, brain)
+    if brain.at_handoff_pose():  # what the hand-off model sees of this camera
+        x1, y1, x2, y2 = vision.gripper_box(img.shape, brain.cfg, brain.arm.pos["shoulder_pan"])
+        grab = brain.view.get("grab_p")
+        colour = GREEN if grab is not None and grab >= brain.cfg.handoff.threshold else WHITE
+        cv2.rectangle(img, (x1, y1), (x2, y2), colour, 2)
+        _label(img, "hand-off view" + ("" if grab is None else f"  P(grabbed) {grab:.2f}"), x1 + 4, y1 + 18, colour)
     return img
 
 
@@ -110,7 +100,7 @@ def draw_wrist(frame: np.ndarray, brain) -> np.ndarray:
     img, scale = _shrink(frame)
     height, width = img.shape[:2]
     view = brain.view
-    cv2.line(img, (width // 2, 80), (width // 2, height), GREY, 1)
+    cv2.line(img, (width // 2, 0), (width // 2, height), GREY, 1)
     for i, (box, score, label) in enumerate(view.get("detections", [])):
         x1, y1, x2, y2 = (int(v * scale) for v in box)
         colour = YELLOW if i == 0 else GREY
@@ -131,7 +121,6 @@ def draw_wrist(frame: np.ndarray, brain) -> np.ndarray:
     if "countdown" in view:
         _label(img, f"give up in {view['countdown']:.0f} s", width - 150, height - 14, YELLOW, 0.55)
     if brain.capture.folder is not None:
-        cv2.circle(img, (width - 24, 100), 9, RED, -1)
-        _label(img, f"saving images: {brain.capture.saved}", width - 200, 105, RED)
-    _banner(img, brain)
+        cv2.circle(img, (width - 20, 20), 8, RED, -1)
+        _label(img, f"saving images: {brain.capture.saved}", width - 210, 25, RED)
     return img

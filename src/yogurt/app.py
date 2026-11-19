@@ -16,7 +16,7 @@ from pathlib import Path
 import cv2
 from aiohttp import web
 
-from . import collect, config, overlay
+from . import collect, config, lab, overlay
 from .arm import JOINTS, Arm
 from .audio import Mic
 from .cameras import Camera
@@ -54,18 +54,30 @@ def make_app(cfg, brain: Brain) -> web.Application:
     async def index(request):
         return web.FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-cache"})
 
+    @routes.get("/lab")
+    async def lab_page(request):
+        return web.FileResponse(STATIC / "lab.html", headers={"Cache-Control": "no-cache"})
+
     @routes.get("/video/{camera}")
     async def video(request):
+        """base, wrist: the cameras with overlays. handoff: the hand-off model's input, as it is saved."""
         name = request.match_info["camera"]
-        camera, draw = {"base": (brain.base, overlay.draw_base), "wrist": (brain.wrist, overlay.draw_wrist)}[name]
+        if name not in ("base", "wrist", "handoff"):
+            raise web.HTTPNotFound()
         response = web.StreamResponse(headers={"Content-Type": "multipart/x-mixed-replace; boundary=frame",
                                                "Cache-Control": "no-cache"})
         await response.prepare(request)
 
         def render() -> bytes:
-            frame = camera.read()
-            img = draw(frame, brain) if frame is not None else overlay.no_signal(name, camera.error)
-            return cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 75])[1].tobytes()
+            if name == "handoff":
+                img = brain.handoff_picture()
+                if img is None:
+                    img = overlay.no_signal("wrist and base", brain.wrist.error or brain.base.error)
+            else:
+                camera, draw = (brain.base, overlay.draw_base) if name == "base" else (brain.wrist, overlay.draw_wrist)
+                frame = camera.read()
+                img = draw(frame, brain) if frame is not None else overlay.no_signal(name, camera.error)
+            return cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 85])[1].tobytes()
 
         with contextlib.suppress(ConnectionResetError, asyncio.CancelledError):
             while True:
@@ -117,17 +129,10 @@ def make_app(cfg, brain: Brain) -> web.Application:
                 "language model": brain.slm_status,
                 "leader arm": cfg.leader.port or "not configured",
             },
-            "machine": cfg.machine, "demo_mode": brain.demo_mode,
-            "capture": {"running": brain.capture.folder is not None, "saved": brain.capture.saved},
+            "machine": cfg.machine, "session": brain.session_status(),
+            "capture": capture_status(),
             "check": {"pan_min": cfg.check.pan_min_deg, "pan_max": cfg.check.pan_max_deg},
         })
-
-    @routes.get("/api/data")
-    async def data_counts(request):
-        prompts = json.loads((collect.DATA / "wake_word" / "prompts.json").read_text())
-        shots = json.loads((collect.DATA / "shots.json").read_text())
-        return web.json_response({"counts": await asyncio.to_thread(collect.counts), "prompts": prompts,
-                                  "shots": shots, "image_sets": collect.IMAGE_SETS})
 
     # ---- state machine ----------------------------------------------------------------------
 
@@ -190,59 +195,269 @@ def make_app(cfg, brain: Brain) -> web.Application:
 
     # ---- data collection --------------------------------------------------------------------
 
-    @routes.post("/api/collect/audio")
-    async def collect_audio(request):
+    # ---- the Lab: wake-word clips ------------------------------------------------------------
+
+    def served(file_or_bytes, content_type=None):
+        if isinstance(file_or_bytes, bytes):
+            return web.Response(body=file_or_bytes, content_type=content_type,
+                                headers={"Cache-Control": "private, max-age=3600"})
+        return web.FileResponse(file_or_bytes, headers={"Cache-Control": "no-cache"})
+
+    async def find(lookup, *args):
+        """A file the Lab asked for by name, or 404."""
+        try:
+            return await asyncio.to_thread(lookup, *args)
+        except (LookupError, ValueError):
+            raise web.HTTPNotFound() from None
+
+    @routes.get("/api/lab/wake")
+    async def lab_wake(request):
+        clips = await asyncio.to_thread(collect.clips)
+        totals = {label: {"clips": 0, "seconds": 0.0} for label in collect.AUDIO_LABELS}
+        for c in clips:
+            totals[c["label"]]["clips"] += 1
+            totals[c["label"]]["seconds"] += c["seconds"] or 0.0
+        return web.json_response({
+            "clips": clips, "totals": totals, "prompts": json.loads(collect.PROMPTS.read_text()),
+            "targets": {label: collect.TARGETS[f"wake_word/{label}"] for label in collect.AUDIO_LABELS},
+            "train": collect.TRAIN["wake_word"], "model": brain.models.get("wake_word"),
+        })
+
+    @routes.get("/api/lab/wake/{label}/{name}")
+    async def lab_wake_clip(request):
+        return served(await find(collect.clip_file, request.match_info["label"], request.match_info["name"]))
+
+    recording_clip = []
+
+    @routes.post("/api/lab/wake/record")
+    async def lab_wake_record(request):
         body = await request.json()
         seconds = min(max(float(body["seconds"]), 0.5), 120)
+        if body.get("label") not in collect.AUDIO_LABELS:
+            raise ValueError(f"label must be one of {collect.AUDIO_LABELS}")
         if brain.mic.error:
             raise RuntimeError(f"microphone: {brain.mic.error}")
-        started = time.monotonic()
-        await asyncio.sleep(seconds)
-        clip = brain.mic.audio(started, started + seconds)
-        file = collect.save_audio_clip(body["label"], clip, body.get("phrase", ""))
-        return web.json_response({"file": file.name, "peak": round(float(abs(clip).max()), 3) if len(clip) else 0})
+        if recording_clip:
+            raise RuntimeError("a clip is already being recorded")
+        recording_clip.append(True)
+        try:
+            started = time.monotonic()
+            await asyncio.sleep(seconds)
+            clip = brain.mic.audio(started, started + seconds)
+        finally:
+            recording_clip.clear()
+        file = await asyncio.to_thread(collect.save_audio_clip, body["label"], clip, body.get("phrase", ""))
+        return web.json_response(await asyncio.to_thread(collect.clip_info, file, body["label"]))
 
-    @routes.post("/api/collect/images")
-    async def collect_images(request):
+    @routes.post("/api/lab/wake/delete")
+    async def lab_wake_delete(request):
+        clips = (await request.json())["clips"]
+        return web.json_response({"deleted": await asyncio.to_thread(collect.delete_clips, clips)})
+
+    @routes.post("/api/lab/wake/move")
+    async def lab_wake_move(request):
+        body = await request.json()
+        return web.json_response({"moved": await asyncio.to_thread(collect.move_clips, body["clips"], body["to"])})
+
+    # ---- the Lab: wrist images -------------------------------------------------------------
+
+    def capture_status() -> dict:
+        folder = brain.capture.folder
+        if folder is None:
+            return {"running": False, "saved": brain.capture.saved}
+        return {"running": True, "saved": brain.capture.saved, "dataset": folder.parent.parent.name,
+                "label": folder.parent.name, "burst": folder.name}
+
+    def not_capturing(dataset: str, label: str, burst: str) -> None:
+        c = capture_status()
+        if c["running"] and (c["dataset"], c["label"], c["burst"]) == (dataset, label, burst):
+            raise RuntimeError("pictures are still being saved into this burst: press Stop first")
+
+    @routes.get("/api/lab/images")
+    async def lab_images(request):
+        return web.json_response({
+            "sets": await asyncio.to_thread(collect.image_sets), "image_sets": collect.IMAGE_SETS,
+            "shots": json.loads(collect.SHOTS.read_text()), "capture": capture_status(), "train": collect.TRAIN,
+            "models": {d: brain.models.get(m) for d, m in collect.MODELS.items() if d != "wake_word"},
+            "detector": brain.detector is not None,
+        })
+
+    @routes.get("/api/lab/images/next-unlabelled")
+    async def lab_next_unlabelled(request):
+        found = await asyncio.to_thread(collect.next_unlabelled)
+        return web.json_response({"burst": found[0], "name": found[1]} if found else {"burst": None, "name": None})
+
+    @routes.get("/api/lab/images/propose/{burst}/{name}")
+    async def lab_propose(request):
+        """The loaded detector's guess at the cup, drawn for the person to correct."""
+        if brain.detector is None:
+            return web.json_response({"box": None})
+        file = await find(collect.image_file, "yogurt_detection", "images", request.match_info["burst"],
+                          request.match_info["name"])
+        frame = cv2.imread(str(file))
+        found = await asyncio.to_thread(brain.detector.detect, frame, 0.1)
+        if not found:
+            return web.json_response({"box": None})
+        h, w = frame.shape[:2]
+        x1, y1, x2, y2 = found[0].box
+        return web.json_response({"box": [x1 / w, y1 / h, x2 / w, y2 / h]})
+
+    @routes.get("/api/lab/images/{dataset}/{label}")
+    async def lab_bursts(request):
+        m = request.match_info
+        return web.json_response({"bursts": await asyncio.to_thread(collect.bursts, m["dataset"], m["label"])})
+
+    @routes.get("/api/lab/images/{dataset}/{label}/{burst}")
+    async def lab_burst(request):
+        m = request.match_info
+        images = await asyncio.to_thread(collect.burst_images, m["dataset"], m["label"], m["burst"])
+        return web.json_response({"images": images})
+
+    @routes.get("/api/lab/images/{dataset}/{label}/{burst}/{name}")
+    async def lab_image(request):
+        m = request.match_info
+        file = await find(collect.image_file, m["dataset"], m["label"], m["burst"], m["name"])
+        if "thumb" in request.query:
+            return served(await find(collect.thumbnail, file), "image/jpeg")
+        return served(file)
+
+    @routes.post("/api/lab/images/capture")
+    async def lab_capture(request):
         body = await request.json()
         if body.get("stop"):
-            return web.json_response({"saved": brain.capture.stop()})
-        brain.capture.start(body["dataset"], body["label"], min(max(float(body.get("per_second", 2)), 0.2), 10))
+            brain.capture.stop()
+        elif brain.capture.folder is not None:
+            raise RuntimeError("pictures are already being saved: press Stop first")
+        else:
+            brain.capture.start(body["dataset"], body["label"], min(max(float(body.get("per_second", 2)), 0.2), 10))
+        return web.json_response(capture_status())
+
+    @routes.post("/api/lab/images/delete")
+    async def lab_images_delete(request):
+        """Delete some pictures of a burst (`names`), or the whole burst (no `names`)."""
+        b = await request.json()
+        not_capturing(b["dataset"], b["label"], b["burst"])
+        if b.get("names") is None:
+            gone = await asyncio.to_thread(collect.delete_burst, b["dataset"], b["label"], b["burst"])
+            brain.say(f"Lab: deleted burst {b['dataset']}/{b['label']}/{b['burst']} ({gone} pictures)")
+            return web.json_response({"deleted": gone, "left": 0})
+        left = await asyncio.to_thread(collect.delete_images, b["dataset"], b["label"], b["burst"], b["names"])
+        return web.json_response({"deleted": len(b["names"]), "left": left})
+
+    @routes.post("/api/lab/images/move")
+    async def lab_images_move(request):
+        b = await request.json()
+        not_capturing(b["dataset"], b["label"], b["burst"])
+        name = await asyncio.to_thread(collect.move_burst, b["dataset"], b["label"], b["burst"], b["to"])
+        brain.say(f"Lab: burst {b['burst']} relabelled {b['dataset']}/{b['label']} -> {b['to']}")
+        return web.json_response({"burst": name})
+
+    @routes.post("/api/lab/images/box")
+    async def lab_box(request):
+        b = await request.json()
+        await asyncio.to_thread(collect.save_box, b["burst"], b["name"], b.get("box"))
         return web.json_response({"ok": True})
 
-    @routes.get("/api/label/next")
-    async def label_next(request):
-        image = await asyncio.to_thread(collect.next_unlabelled)
-        if image is None:
-            return web.json_response({"image": None})
-        proposal = None
-        if brain.detector is not None:  # suggest a box; the person corrects it
-            frame = cv2.imread(str(image))
-            found = await asyncio.to_thread(brain.detector.detect, frame, 0.1)
-            if found:
-                h, w = frame.shape[:2]
-                x1, y1, x2, y2 = found[0].box
-                proposal = [x1 / w, y1 / h, x2 / w, y2 / h]
-        name = str(image.relative_to(collect.DATA / "yogurt_detection" / "images"))
-        return web.json_response({"image": name, "proposal": proposal})
+    # ---- the Lab: grasp demonstration datasets ---------------------------------------------
 
-    @routes.get("/api/label/image/{name:.*}")
-    async def label_image(request):
-        root = (collect.DATA / "yogurt_detection" / "images").resolve()
-        file = (root / request.match_info["name"]).resolve()
-        if not file.is_relative_to(root) or not file.is_file():
-            raise web.HTTPNotFound()
-        return web.FileResponse(file)
+    def recording() -> str | None:
+        """The dataset a session is writing into: not to be read or changed until the session ends."""
+        return brain.session.settings.get("dataset") if brain.session.busy else None
 
-    @routes.post("/api/label")
-    async def label_save(request):
+    def not_recording(name: str) -> None:
+        if name == recording():
+            raise RuntimeError(f"{name} is being recorded into: stop the recording session first")
+
+    @routes.get("/api/lab/datasets")
+    async def lab_datasets(request):
+        return web.json_response({
+            "datasets": await asyncio.to_thread(lab.list_datasets, recording()),
+            "defaults": {"task": cfg.grasp.task, "fps": cfg.grasp.fps,
+                         "image": [cfg.grasp.image_width, cfg.grasp.image_height]},
+            "name_rule": lab.NAME_RULE, "leader": cfg.leader.port, "detector": brain.detector is not None,
+        })
+
+    @routes.get("/api/lab/datasets/{name}")
+    async def lab_dataset(request):
+        name = request.match_info["name"]
+        not_recording(name)
+        return web.json_response(await asyncio.to_thread(lab.describe, name))
+
+    @routes.get("/api/lab/datasets/{name}/episodes/{index:\\d+}/joints")
+    async def lab_joints(request):
+        name = request.match_info["name"]
+        not_recording(name)
+        return web.json_response(await asyncio.to_thread(lab.joints, name, int(request.match_info["index"])))
+
+    @routes.get("/api/lab/datasets/{name}/videos/{camera}/{chunk:\\d+}/{file:\\d+}")
+    async def lab_video(request):
+        m = request.match_info
+        not_recording(m["name"])
+        try:
+            video = await asyncio.to_thread(lab.video_file, m["name"], m["camera"], int(m["chunk"]), int(m["file"]))
+        except (LookupError, ValueError):
+            raise web.HTTPNotFound() from None
+        # Deleting episodes rewrites a file under the same address: always check with the server.
+        return web.FileResponse(video, headers={"Cache-Control": "no-cache"})
+
+    async def rewrite(name: str, change, *args):
+        """Run one dataset change at a time, never on the dataset a session is recording into."""
+        lab.check_name(name)
+        if brain.session.busy:
+            raise RuntimeError("a recording session is running: stop it before deleting anything")
+        if not lab.LOCK.acquire(blocking=False):
+            raise RuntimeError("another dataset change is still in progress")
+        try:
+            return await asyncio.to_thread(change, name, *args)
+        finally:
+            lab.LOCK.release()
+
+    @routes.post("/api/lab/datasets/{name}/delete-episodes")
+    async def lab_delete_episodes(request):
+        name, episodes = request.match_info["name"], (await request.json()).get("episodes")
+        if not isinstance(episodes, list):
+            raise ValueError("episodes must be a list of episode numbers")
+        left = await rewrite(name, lab.delete_episodes, episodes)
+        brain.say(f"Lab: deleted episode(s) {sorted(set(episodes))} from {name}; {left} left")
+        return web.json_response({"ok": True, "remaining": left})
+
+    @routes.post("/api/lab/datasets/{name}/delete")
+    async def lab_delete_dataset(request):
+        name = request.match_info["name"]
+        if (await request.json()).get("confirm") != name:
+            raise ValueError("type the dataset's name to confirm")
+        await rewrite(name, lab.delete_dataset)
+        brain.say(f"Lab: deleted dataset {name}")
+        return web.json_response({"ok": True})
+
+    @routes.post("/api/lab/record")
+    async def lab_record(request):
+        await brain.start_session(await request.json())
+        return web.json_response({"ok": True})
+
+    @routes.post("/api/lab/session")
+    async def lab_session(request):
+        """The recording screen's buttons. `phase` is the phase the operator saw: a press that arrives after
+        the session has moved on (a double click) is refused instead of acting on the next phase."""
         body = await request.json()
-        collect.save_box(body["image"], body.get("box"))
-        return web.json_response({"ok": True})
-
-    @routes.post("/api/demos/start")
-    async def demos_start(request):
-        brain.start_demos()
+        action = body.get("action")
+        if action == "stop":
+            await brain.stop_session()
+            return web.json_response({"ok": True})
+        status = brain.session_status()
+        if not status["open"]:
+            raise RuntimeError("no recording session is running")
+        phase = status["phase"]
+        if body.get("phase") != phase:
+            raise RuntimeError(f"the session has moved on ({phase}): nothing was done")
+        if action == "next" and phase in ("positioning", "recording", "resetting"):
+            brain.signal({"positioning": "found", "recording": "end_recording", "resetting": "end_reset"}[phase])
+        elif action == "rerecord" and phase == "recording":
+            brain.signal("rerecord")
+        elif action == "resume" and phase == "paused":
+            brain.go("CHECK", "recording resumed")
+        else:
+            raise RuntimeError(f"'{action}' is not possible while {phase}")
         return web.json_response({"ok": True})
 
     # ---- lifecycle --------------------------------------------------------------------------

@@ -5,137 +5,207 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Yo-gurt</title>
 <style>
-  :root { --bg:#14161a; --panel:#1e2228; --line:#30363f; --text:#e6e8eb; --dim:#98a1ad;
-          --accent:#ffd23f; --ok:#5ad25a; --warn:#ff9d2e; --bad:#f0503c; --blue:#3ea0e6; --pink:#e65adc; }
-  * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.4 system-ui, sans-serif; }
-  header { display:flex; align-items:center; gap:12px; padding:10px 14px; background:var(--panel);
-           border-bottom:1px solid var(--line); position:sticky; top:0; z-index:5; flex-wrap:wrap; }
-  h1 { font-size:18px; margin:0 8px 0 0; } h2 { font-size:13px; margin:0 0 8px; color:var(--dim);
-       text-transform:uppercase; letter-spacing:.06em; } h3 { font-size:13px; margin:12px 0 6px; }
-  .chips { display:flex; gap:4px; flex-wrap:wrap; flex:1; }
-  button { background:#2b313a; color:var(--text); border:1px solid var(--line); border-radius:6px;
-           padding:6px 10px; font:inherit; cursor:pointer; }
-  button:hover:not(:disabled) { border-color:var(--dim); } button:disabled { opacity:.35; cursor:default; }
-  .chip.on { background:var(--accent); color:#111; border-color:var(--accent); font-weight:700; }
-  #stop { background:var(--warn); color:#111; font-weight:700; border-color:var(--warn); padding:8px 16px; }
-  #kill { background:var(--bad); color:#fff; font-weight:700; border-color:var(--bad); padding:8px 20px; }
-  #detail { padding:10px 14px; font-size:16px; background:#191c21; border-bottom:1px solid var(--line); min-height:44px; }
-  #detail b { color:var(--accent); }
-  main { display:grid; grid-template-columns:repeat(12, 1fr); gap:10px; padding:10px; }
-  section { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px; min-width:0; }
-  .c6 { grid-column:span 6; } .c4 { grid-column:span 4; } .c3 { grid-column:span 3; } .c5 { grid-column:span 5; }
-  .c8 { grid-column:span 8; } .c12 { grid-column:span 12; }
-  @media (max-width:1100px) { .c6,.c4,.c3,.c5,.c8 { grid-column:span 12; } }
-  img.feed { width:100%; border-radius:6px; background:#000; display:block; }
-  .row { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin:4px 0; }
-  input, select { background:#12151a; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:6px 8px; font:inherit; }
-  input[type=text] { flex:1; min-width:140px; } input[type=number] { width:70px; }
-  table { width:100%; border-collapse:collapse; } td, th { padding:2px 6px; text-align:left; vertical-align:top; }
-  th { color:var(--dim); font-weight:500; } .dim { color:var(--dim); } .mono { font-family:ui-monospace, monospace; font-size:12px; }
-  .ok { color:var(--ok); } .bad { color:var(--bad); } .warn { color:var(--warn); }
-  .joint { display:grid; grid-template-columns:110px 1fr 150px auto; gap:8px; align-items:center; margin:3px 0; }
-  .track { position:relative; height:12px; background:#12151a; border-radius:6px; border:1px solid var(--line); }
-  .track i { position:absolute; top:-3px; width:3px; height:16px; border-radius:2px; }
-  .track .pos { background:var(--accent); } .track .tgt { background:var(--blue); opacity:.8; }
-  #log { max-height:240px; overflow:auto; } #log td { border-top:1px solid var(--line); }
-  #labeller { position:relative; display:inline-block; max-width:100%; cursor:crosshair; }
-  #labeller img { max-width:100%; display:block; user-select:none; -webkit-user-drag:none; }
-  #box { position:absolute; border:2px solid var(--accent); pointer-events:none; display:none; }
-  .banner { background:var(--bad); color:#fff; padding:8px 14px; font-weight:600; display:none; }
-  details summary { cursor:pointer; color:var(--dim); margin:6px 0; }
+  /* Same look as the Lab (Tailwind's gray scale on black, orange accent), in plain CSS. */
+  :root { --g950:#030712; --g900:#111827; --g800:#1f2937; --g700:#374151; --g600:#4b5563; --g500:#6b7280;
+          --g400:#9ca3af; --g300:#d1d5db; --g200:#e5e7eb; --orange:#f97316; --orange4:#fb923c; --red:#ef4444;
+          --red4:#f87171; --red3:#fca5a5; --green:#22c55e; --green4:#4ade80; --blue:#3b82f6; --blue3:#93c5fd;
+          --amber:#f59e0b; --amber3:#fcd34d; --pink:#d946ef; }
+  * { box-sizing:border-box; }
+  [hidden] { display:none !important; }
+  body { margin:0; background:#000; color:#fff; font:14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  button, input, select { font:inherit; color:inherit; }
+  .mono { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .muted { color:var(--g500); } .dim { color:var(--g400); } .tnum { font-variant-numeric:tabular-nums; }
+  .ok { color:var(--green4); } .warn { color:var(--amber3); } .bad { color:var(--red4); }
+  svg.i { width:16px; height:16px; flex:none; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  svg.i.s { width:14px; height:14px; }
+  .grow { flex:1; }
+
+  header { position:sticky; top:0; z-index:30; display:flex; align-items:center; gap:10px; padding:10px 24px;
+           background:#000; border-bottom:1px solid var(--g800); flex-wrap:wrap; }
+  header h1 { font-size:18px; font-weight:600; margin:0; display:flex; align-items:center; gap:8px; letter-spacing:-.01em; }
+  header h1 svg { color:var(--orange); width:20px; height:20px; }
+  .pill { display:inline-flex; align-items:center; gap:8px; padding:4px 12px; border-radius:999px; font-size:11px;
+          font-weight:700; letter-spacing:.1em; background:rgba(107,114,128,.15); color:var(--g300); white-space:nowrap; }
+  .pill i { width:8px; height:8px; border-radius:50%; background:var(--g500); }
+  .pill.red { background:rgba(239,68,68,.15); color:var(--red3); } .pill.red i { background:var(--red); }
+  .pill.blue { background:rgba(59,130,246,.15); color:var(--blue3); } .pill.blue i { background:var(--blue); }
+  .pill.amber { background:rgba(245,158,11,.15); color:var(--amber3); } .pill.amber i { background:var(--amber); }
+  .pill.green { background:rgba(34,197,94,.15); color:var(--green4); } .pill.green i { background:var(--green); }
+  .pill.pulse i { animation:pulse 2s cubic-bezier(.4,0,.6,1) infinite; }
+  @keyframes pulse { 50% { opacity:.4; } }
+
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:36px; padding:0 12px;
+         border-radius:6px; border:1px solid var(--g800); background:var(--g950); color:var(--g300); font-size:12px;
+         cursor:pointer; white-space:nowrap; text-decoration:none; }
+  .btn:hover:not(:disabled) { background:var(--g900); color:#fff; }
+  .btn:disabled { opacity:.4; cursor:default; }
+  .btn:focus-visible, input:focus { outline:2px solid var(--orange); outline-offset:1px; }
+  .btn.sm { height:28px; padding:0 8px; }
+  .btn.icon { width:28px; padding:0; }
+  #safe { background:var(--amber); border-color:var(--amber); color:#111; font-weight:700; font-size:13px; }
+  #safe:hover { background:#d97706; color:#111; }
+  #kill { background:var(--red); border-color:var(--red); color:#fff; font-weight:700; font-size:13px; padding:0 18px; }
+  #kill:hover { background:#dc2626; color:#fff; }
+  #safe.on, #kill.on { box-shadow:0 0 0 2px #000, 0 0 0 4px #fff; }
+  .key { margin-left:6px; padding:1px 6px; border-radius:4px; font:11px ui-monospace, monospace; background:rgba(0,0,0,.3); color:rgba(255,255,255,.75); }
+  #safe .key { color:rgba(0,0,0,.6); background:rgba(0,0,0,.12); }
+  #lost { display:none; background:var(--red); color:#fff; padding:8px 24px; font-weight:600; }
+
+  main { max-width:1400px; margin:0 auto; padding:20px 24px 64px; display:grid; grid-template-columns:repeat(12, minmax(0, 1fr)); gap:16px; }
+  .card { border:1px solid var(--g800); background:var(--g950); border-radius:8px; min-width:0; }
+  .pad { padding:16px; }
+  .c12 { grid-column:span 12; } .c8 { grid-column:span 8; } .c6 { grid-column:span 6; } .c5 { grid-column:span 5; }
+  .c4 { grid-column:span 4; } .c3 { grid-column:span 3; }
+  @media (max-width:1100px) { .c8, .c6, .c5, .c4, .c3 { grid-column:span 12; } }
+  .ctitle { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--g500); margin:0 0 10px;
+            display:flex; align-items:center; gap:8px; }
+  .ctitle.mt { margin-top:18px; }
+  .ctitle .sub { text-transform:none; letter-spacing:0; color:var(--g600); font-size:12px; }
+
+  /* what the robot is doing: the state, why, and the pipeline */
+  .status { display:flex; align-items:center; gap:16px; flex-wrap:wrap; padding:14px 16px; }
+  .status .now { display:flex; align-items:center; gap:12px; flex:1; min-width:300px; }
+  #state { font-size:22px; font-weight:700; letter-spacing:-.01em; white-space:nowrap; }
+  #since { font-size:12px; color:var(--g500); }
+  #detail { flex-basis:100%; font-size:16px; color:var(--g200); min-height:24px; order:3; }
+  .steps { display:inline-flex; border:1px solid var(--g800); border-radius:8px; overflow:hidden; flex-wrap:wrap; }
+  .steps button { background:var(--g950); border:0; border-right:1px solid var(--g800); color:var(--g500); padding:6px 12px;
+                  font-size:11px; font-weight:600; letter-spacing:.06em; cursor:pointer; }
+  .steps button:last-child { border-right:0; }
+  .steps button:hover { color:#fff; background:var(--g900); }
+  .steps button.done { color:var(--g400); }
+  .steps button.on { background:rgba(249,115,22,.15); color:var(--orange4); }
+
+  /* camera feeds */
+  .cam .head { display:flex; align-items:baseline; gap:8px; padding:10px 14px; border-bottom:1px solid var(--g800); }
+  .cam .head b { font-size:13px; font-weight:600; }
+  .cam .head span { font-size:12px; color:var(--g500); }
+  .cam img { display:block; width:100%; aspect-ratio:16/9; object-fit:contain; background:#000; border-radius:0 0 8px 8px; }
+
+  /* stand-in controls */
+  .row { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin:6px 0; }
+  input[type=text] { flex:1; min-width:160px; height:36px; padding:0 12px; border-radius:6px; border:1px solid var(--g700);
+                     background:var(--g800); color:#fff; }
+  input::placeholder { color:var(--g500); }
+  .hint { font-size:12px; color:var(--g500); margin:0 0 10px; }
+
+  table.kv { width:100%; border-collapse:collapse; font-size:13px; }
+  table.kv th { width:42%; padding:5px 10px 5px 0; text-align:left; font-weight:400; color:var(--g500); vertical-align:top; }
+  table.kv td { padding:5px 0; color:var(--g200); vertical-align:top; overflow-wrap:anywhere; }
+  table.kv tr + tr th, table.kv tr + tr td { border-top:1px solid var(--g900); }
+
+  /* top view */
+  #map { width:100%; aspect-ratio:300/230; display:block; }
+  .legend { display:flex; flex-wrap:wrap; gap:4px 12px; font-size:11px; color:var(--g400); margin-top:8px; }
+  .legend span { display:inline-flex; align-items:center; gap:5px; }
+  .legend i { width:8px; height:8px; border-radius:50%; display:inline-block; }
+  .legend i.line { width:12px; height:2px; border-radius:1px; }
+
+  /* arm */
+  .joint { display:grid; grid-template-columns:110px 1fr 180px auto; gap:12px; align-items:center; height:34px; font-size:12px; }
+  .joint > span:first-child { color:var(--g400); }
+  .track { position:relative; height:6px; background:var(--g800); border-radius:999px; }
+  .track i { position:absolute; top:-4px; width:3px; height:14px; border-radius:2px; transform:translateX(-1px); }
+  .track .pos { background:var(--orange); } .track .tgt { background:var(--g400); opacity:.7; }
+  .pose { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:6px 0; border-top:1px solid var(--g900); font-size:12px; }
+  .pose b { width:70px; font-weight:600; color:var(--g200); }
+
+  /* event log */
+  #log { max-height:300px; overflow-y:auto; }
+  table.events { width:100%; border-collapse:collapse; font-size:12px; }
+  table.events td { padding:5px 8px 5px 0; border-top:1px solid var(--g900); vertical-align:top; }
+  table.events tr:first-child td { border-top:0; }
+  .badge { display:inline-block; padding:0 7px; border-radius:999px; font-size:10px; font-weight:600; letter-spacing:.04em;
+           background:var(--g800); color:var(--g300); white-space:nowrap; }
+
+  #toasts { position:fixed; right:16px; bottom:16px; z-index:40; display:flex; flex-direction:column; gap:8px; width:380px; max-width:calc(100% - 32px); }
+  .toast { border:1px solid #991b1b; background:#7f1d1d; border-radius:8px; padding:12px 16px; box-shadow:0 10px 30px rgba(0,0,0,.5); font-size:13px; color:#fecaca; }
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-cup" viewBox="0 0 24 24"><path d="m6 8 1.75 12.28a2 2 0 0 0 2 1.72h4.54a2 2 0 0 0 2-1.72L18 8"/><path d="M5 8h14"/><path d="M7 15a6.47 6.47 0 0 1 5 0 6.47 6.47 0 0 0 5 0"/><path d="m12 8 1-6h2"/></symbol>
+  <symbol id="i-db" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></symbol>
+  <symbol id="i-redo" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
+</svg>
+
 <header>
-  <h1>Yo-gurt</h1>
-  <div class="chips" id="chips"></div>
-  <button id="stop" title="Freeze the arm where it is, servos stay powered (Space)">SAFE STOP</button>
-  <button id="kill" title="Release all servos and disconnect everything (Esc)">KILL</button>
+  <h1><svg class="i"><use href="#i-cup"/></svg>Yo-gurt</h1>
+  <div class="grow"></div>
+  <span class="pill red pulse" id="lab-status" hidden><i></i><span></span></span>
+  <a class="btn" href="/lab" title="Record, review and tidy up every dataset: grasp demonstrations, wrist images, wake word"><svg class="i s"><use href="#i-db"/></svg>Lab</a>
+  <button class="btn" id="safe" title="Freeze the arm where it is, servos stay powered">SAFE STOP<span class="key">Space</span></button>
+  <button class="btn" id="kill" title="Release all servos and disconnect everything">KILL<span class="key">Esc</span></button>
 </header>
-<div class="banner" id="banner"></div>
-<div id="detail"></div>
+<div id="lost">Lost contact with the robot program.</div>
 
 <main>
-  <section class="c6"><h2>Base camera — who is talking, who gets the yogurt</h2><img class="feed" src="/video/base" alt="base camera"></section>
-  <section class="c6"><h2>Wrist camera — the yogurt and the gripper</h2><img class="feed" src="/video/wrist" alt="wrist camera"></section>
-
-  <section class="c5">
-    <h2>Stand in for a model / test a state</h2>
-    <p class="dim" style="margin:0 0 6px">Click a state in the top bar to jump to it. The buttons below supply the answer a model
-      would give; each is live only in the state that waits for it.</p>
-    <div class="row"><button data-signal="wake" data-in="IDLE">Wake (“Yo, gurt”)</button>
-      <input type="text" id="command" placeholder="type a command, e.g. give him the yogurt">
-      <button id="send" data-in="IDLE LISTEN">Send command</button></div>
-    <div class="row"><button data-signal="found" data-in="CHECK">Yogurt centred</button>
-      <button data-signal="grasped" data-in="GRASP">Grasp done</button>
-      <button data-signal="held" data-value="true" data-in="VERIFY">Held</button>
-      <button data-signal="held" data-value="false" data-in="VERIFY">Not held</button>
-      <button data-signal="grabbed" data-in="HANDOFF">Taken</button></div>
-    <h3>This request</h3>
-    <table id="request"></table>
+  <section class="card status c12">
+    <div class="now"><span class="pill" id="pill"><i></i><span id="state">…</span></span><span id="since" class="tnum"></span></div>
+    <div class="steps" id="steps" title="Click a state to jump to it"></div>
+    <div id="detail"></div>
   </section>
 
-  <section class="c3"><h2>Top view — arm, people, voice</h2><canvas id="map" width="300" height="230" style="width:100%"></canvas>
-    <div class="dim mono"><span style="color:var(--warn)">━</span> arm <span style="color:var(--ok)">●</span> requester
-      <span style="color:var(--blue)">●</span> other <span style="color:var(--accent)">◎</span> target
-      <span style="color:var(--pink)">┄</span> voice <span style="color:#fff">■</span> yogurt</div></section>
+  <section class="card cam c6"><div class="head"><b>Base camera</b><span>who is talking, who gets the yogurt</span></div>
+    <img src="/video/base" alt="base camera"></section>
+  <section class="card cam c6"><div class="head"><b>Wrist camera</b><span>the yogurt and the gripper</span></div>
+    <img src="/video/wrist" alt="wrist camera"></section>
 
-  <section class="c4"><h2>Models and hardware</h2><table id="health"></table>
-    <div class="row"><button id="reconnect">Reconnect hardware</button>
-      <button id="reload" data-in="SAFE_STOP" title="Load model files again after training">Reload models</button></div></section>
+  <section class="card pad c5">
+    <div class="ctitle">Stand in for a model</div>
+    <p class="hint">Each button gives the answer a model would; it is live only in the state that waits for it.</p>
+    <div class="row"><button class="btn" data-signal="wake" data-in="IDLE">Wake (“Yo, gurt”)</button></div>
+    <div class="row"><input type="text" id="command" placeholder="Type a command, e.g. give him the yogurt">
+      <button class="btn" id="send" data-in="IDLE LISTEN"><svg class="i s"><use href="#i-send"/></svg>Send</button></div>
+    <div class="row"><button class="btn" data-signal="found" data-in="CHECK">Yogurt centred</button>
+      <button class="btn" data-signal="grasped" data-in="GRASP">Grasp done</button>
+      <button class="btn" data-signal="held" data-value="true" data-in="VERIFY">Held</button>
+      <button class="btn" data-signal="held" data-value="false" data-in="VERIFY">Not held</button>
+      <button class="btn" data-signal="grabbed" data-in="HANDOFF">Taken</button></div>
+    <div class="ctitle mt">This request</div>
+    <table class="kv" id="request"></table>
+  </section>
 
-  <section class="c8">
-    <h2>Arm</h2>
+  <section class="card pad c3">
+    <div class="ctitle">Top view</div>
+    <canvas id="map"></canvas>
+    <div class="legend"><span><i class="line" style="background:var(--orange)"></i>arm</span>
+      <span><i style="background:var(--green)"></i>requester</span><span><i style="background:var(--blue)"></i>other</span>
+      <span><i style="border:2px solid var(--amber)"></i>target</span><span><i class="line" style="background:var(--pink)"></i>voice</span>
+      <span><i style="background:#fff;border-radius:1px"></i>yogurt</span></div>
+  </section>
+
+  <section class="card pad c4">
+    <div class="ctitle">Models and hardware</div>
+    <table class="kv" id="health"></table>
+    <div class="row" style="margin-top:12px"><button class="btn" id="reconnect"><svg class="i s"><use href="#i-redo"/></svg>Reconnect hardware</button>
+      <button class="btn" id="reload" data-in="SAFE_STOP" title="Load model files again after training (Safe Stop only)">Reload models</button></div>
+  </section>
+
+  <section class="card pad c8">
+    <div class="ctitle">Arm <span class="sub" id="armnote"></span></div>
     <div id="joints"></div>
-    <div class="row" style="margin-top:8px"><span class="dim">Teach / test (Safe Stop only):</span>
-      <button id="release" data-in="SAFE_STOP">Release servos (move by hand)</button>
-      <button id="engage" data-in="SAFE_STOP">Engage servos</button></div>
-    <div id="poses"></div>
+    <div class="ctitle mt">Teach / test <span class="sub">Safe Stop only</span></div>
+    <div class="row"><button class="btn" id="release" data-in="SAFE_STOP">Release servos (move by hand)</button>
+      <button class="btn" id="engage" data-in="SAFE_STOP">Engage servos</button></div>
+    <div id="poses" style="margin-top:8px"></div>
   </section>
 
-  <section class="c4"><h2>Event log</h2><div id="log"><table id="events"></table></div></section>
-
-  <section class="c12">
-    <h2>Data collection</h2>
-    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:16px">
-      <div>
-        <h3>1 · Wake word clips <span class="dim" id="n-wake"></span></h3>
-        <div class="row"><select id="a-label"><option value="positive">positive — say the wake phrase</option>
-          <option value="negative">negative — say the phrase shown</option>
-          <option value="background">background — room noise / chatter</option></select>
-          <input type="number" id="a-seconds" value="2" min="0.5" max="120" step="0.5"> s</div>
-        <div class="row">Say: <b id="a-phrase" style="font-size:18px"></b></div>
-        <div class="row"><button id="a-record">● Record</button><span id="a-status" class="dim"></span></div>
-      </div>
-      <div>
-        <h3>2 · Wrist images <span class="dim" id="n-images"></span></h3>
-        <div class="row"><select id="i-set"></select><input type="number" id="i-rate" value="2" min="0.2" max="10" step="0.2"> per s</div>
-        <div class="row"><button id="i-start">● Start saving</button><button id="i-stop">■ Stop</button><span id="i-status" class="dim"></span></div>
-        <div class="dim">Record one short burst for each of these:</div><ul id="i-shots" class="dim" style="margin:2px 0; padding-left:18px"></ul>
-      </div>
-      <div>
-        <h3>3 · Grasp demonstrations <span class="dim" id="n-demos"></span></h3>
-        <div class="row"><button id="d-start">Start demo session</button>
-          <button data-signal="demo_save" data-in="GRASP">Save demo</button>
-          <button data-signal="demo_discard" data-in="GRASP">Discard</button></div>
-        <div class="row"><button data-signal="demo_next" data-in="GRASP">Next demo</button>
-          <button data-signal="demo_finish" data-in="GRASP">Finish demos</button></div>
-        <div class="dim">Each demo: the robot finds and centres the cup by itself, then follows the leader arm.</div>
-      </div>
-    </div>
-    <details id="label-panel"><summary>4 · Draw boxes for the yogurt detector <span id="n-label"></span></summary>
-      <div class="row"><button id="l-save">Save box</button><button id="l-none">No yogurt in this picture</button>
-        <span class="dim" id="l-status">Drag a box around the yogurt cup.</span></div>
-      <div id="labeller"><img id="l-img" alt=""><div id="box"></div></div>
-    </details>
+  <section class="card pad c4">
+    <div class="ctitle">Event log</div>
+    <div id="log"><table class="events" id="events"></table></div>
   </section>
 </main>
+<div id="toasts"></div>
 
 <script>
 const $ = id => document.getElementById(id);
 const PIPELINE = ["IDLE","LISTEN","PARSE","CHECK","GRASP","VERIFY","HANDOFF","RETURN"];
-let S = null, prompts = null, shots = {}, promptIndex = 0;
+const C = {orange:"#f97316", green:"#22c55e", blue:"#3b82f6", amber:"#f59e0b", pink:"#d946ef",
+           g800:"#1f2937", g700:"#374151", g500:"#6b7280", g400:"#9ca3af", g200:"#e5e7eb"};
+let S = null;
 
 // Addresses are built from location.origin, which never contains "user:password@"; browsers refuse
 // fetch() with relative addresses on a page that was opened with the password in the URL.
@@ -143,17 +213,21 @@ const get = path => fetch(location.origin + path).then(r => r.json());
 async function post(path, body = {}) {
   const r = await fetch(location.origin + path, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
   const j = await r.json().catch(() => ({}));
-  if (!r.ok || j.error) { flash(j.error || `request failed (${r.status})`); throw new Error(j.error); }
+  if (!r.ok || j.error) { toast(j.error || `request failed (${r.status})`); throw new Error(j.error); }
   return j;
 }
-function flash(text) { const b = $("banner"); b.textContent = text; b.style.display = "block";
-  clearTimeout(flash.t); flash.t = setTimeout(() => b.style.display = "none", 6000); }
-const go = state => post("/api/state", {state});
+function toast(text) {
+  const t = document.createElement("div"); t.className = "toast"; t.textContent = text;
+  $("toasts").appendChild(t); setTimeout(() => t.remove(), 7000);
+}
+const go = state => post("/api/state", {state}).catch(() => {});
+// Only touch the page when something changed, so a button under the mouse is not replaced mid-click.
+const setHTML = (el, html) => { if (el._html !== html) { el._html = html; el.innerHTML = html; } };
 
-// ---- header ----
-PIPELINE.forEach(s => { const b = document.createElement("button"); b.className = "chip"; b.textContent = s;
-  b.title = "Jump to " + s; b.onclick = () => go(s); b.id = "chip-" + s; $("chips").appendChild(b); });
-$("stop").onclick = () => go("SAFE_STOP");
+// ---- header and pipeline ----
+PIPELINE.forEach(s => { const b = document.createElement("button"); b.textContent = s;
+  b.title = "Jump to " + s; b.onclick = () => go(s); b.id = "step-" + s; $("steps").appendChild(b); });
+$("safe").onclick = () => go("SAFE_STOP");
 $("kill").onclick = () => go("KILLED");
 document.addEventListener("keydown", e => {
   if (["INPUT","SELECT","TEXTAREA"].includes(e.target.tagName)) return;
@@ -163,132 +237,103 @@ document.addEventListener("keydown", e => {
 
 // ---- stand-in buttons ----
 document.querySelectorAll("[data-signal]").forEach(b => b.onclick = () =>
-  post("/api/signal", {name:b.dataset.signal, value:b.dataset.value === undefined ? true : b.dataset.value === "true"}));
-$("send").onclick = () => { const v = $("command").value.trim(); if (v) post("/api/signal", {name:"command", value:v}); };
+  post("/api/signal", {name:b.dataset.signal, value:b.dataset.value === undefined ? true : b.dataset.value === "true"}).catch(() => {}));
+$("send").onclick = () => { const v = $("command").value.trim(); if (v) post("/api/signal", {name:"command", value:v}).catch(() => {}); };
 $("command").addEventListener("keydown", e => { if (e.key === "Enter") $("send").click(); });
-$("reconnect").onclick = () => post("/api/reconnect").then(j => { if (!j.ok) flash(j.error); });
-$("reload").onclick = () => post("/api/models/reload");
-$("release").onclick = () => post("/api/arm/torque", {on:false});
-$("engage").onclick = () => post("/api/arm/torque", {on:true});
+$("reconnect").onclick = () => post("/api/reconnect").then(j => { if (!j.ok) toast(j.error); }).catch(() => {});
+$("reload").onclick = () => post("/api/models/reload").catch(() => {});
+$("release").onclick = () => post("/api/arm/torque", {on:false}).catch(() => {});
+$("engage").onclick = () => post("/api/arm/torque", {on:true}).catch(() => {});
 
 // ---- status rendering ----
-const esc = t => String(t ?? "").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+const esc = t => String(t ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const who = p => p ? `${p.id === null ? "voice only" : "face #" + p.id} at ${p.bearing > 0 ? "+" : ""}${p.bearing}°` : "—";
+const kv = rows => rows.map(([k, v, cls]) => `<tr><th>${k}</th><td${cls ? ` class="${cls}"` : ""}>${v}</td></tr>`).join("");
 
 function render() {
-  PIPELINE.forEach(s => $("chip-" + s).classList.toggle("on", S.state === s));
-  $("stop").style.outline = S.state === "SAFE_STOP" ? "3px solid #fff" : "";
-  $("kill").style.outline = S.state === "KILLED" ? "3px solid #fff" : "";
-  $("detail").innerHTML = `<b>${S.state.replace("_", " ")}</b> · ${esc(S.detail)} <span class="dim">(${S.seconds_in_state}s)</span>`;
-  document.querySelectorAll("[data-in]").forEach(b => b.disabled = !b.dataset.in.split(" ").includes(S.state));
+  const st = S.state, at = PIPELINE.indexOf(st);
+  $("pill").className = "pill " + (st === "KILLED" ? "red" : st === "SAFE_STOP" ? "amber" : st === "IDLE" ? "" : "blue pulse");
+  $("state").textContent = st.replace("_", " ");
+  $("since").textContent = `${S.seconds_in_state.toFixed(0)} s in this state`;
+  $("detail").textContent = S.detail;
+  PIPELINE.forEach((s, i) => { const b = $("step-" + s); b.classList.toggle("on", s === st); b.classList.toggle("done", at >= 0 && i < at); });
+  $("safe").classList.toggle("on", st === "SAFE_STOP");
+  $("kill").classList.toggle("on", st === "KILLED");
+  document.querySelectorAll("[data-in]").forEach(b => b.disabled = !b.dataset.in.split(" ").includes(st));
 
   const r = S.request;
-  $("request").innerHTML = [["Heard", r.heard ? "“" + esc(r.heard) + "”" : "—"],
-    ["Give it to", r.recipient_words !== null ? `“${esc(r.recipient_words || "me")}” → the ${r.target_role}` : "—"],
+  setHTML($("request"), kv([["Heard", r.heard ? "“" + esc(r.heard) + "”" : "—"],
+    ["Give it to", r.recipient_words !== null ? `“${esc(r.recipient_words || "me")}” → the ${esc(r.target_role)}` : "—"],
     ["Requester", who(r.requester)], ["Others in view", r.others.length ? r.others.map(who).join("; ") : "—"],
     ["Hand-off target", who(r.target)], ["Yogurt found at", r.yogurt_pan === null ? "—" : `pan ${r.yogurt_pan.toFixed(0)}°`],
-    ["Grasp attempts", r.attempts]].map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join("");
+    ["Grasp attempts", r.attempts]]));
 
   const cls = v => /^(ok|ready)/.test(v) ? "ok" : /^(missing|loading|not configured)/.test(v) ? "warn" : /:\/\//.test(v) ? "" : "bad";
-  $("health").innerHTML = Object.entries(S.models).map(([k, v]) => `<tr><th>model: ${k}</th><td class="${cls(v)}">${esc(v)}</td></tr>`).join("")
-    + Object.entries(S.hardware).map(([k, v]) => `<tr><th>${k}</th><td class="${cls(v)}">${esc(v)}</td></tr>`).join("")
-    + `<tr><th>arm</th><td class="${S.arm.connected ? (S.arm.sim ? "warn" : "ok") : "bad"}">${S.arm.connected
-        ? (S.arm.sim ? "SIMULATED (no servos)" : "ok on " + esc(S.arm.port)) + (S.arm.torque ? "" : " — servos released") : esc(S.arm.fault || "disconnected")}</td></tr>`;
+  const a = S.arm;
+  const armText = a.connected ? (a.sim ? "simulated (no servos)" : "ok on " + esc(a.port)) + (a.torque ? "" : " — servos released") : esc(a.fault || "disconnected");
+  setHTML($("health"), kv([
+    ...Object.entries(S.models).map(([k, v]) => [`model: ${esc(k)}`, esc(v), cls(v)]),
+    ...Object.entries(S.hardware).map(([k, v]) => [esc(k), esc(v), cls(v)]),
+    ["arm", armText, a.connected ? (a.sim ? "warn" : "ok") : "bad"]]));
 
-  const a = S.arm, teach = S.state === "SAFE_STOP";
-  $("joints").innerHTML = Object.keys(a.pos).map(j => { const [lo, hi] = a.limits[j], pct = v => Math.min(100, Math.max(0, 100 * (v - lo) / (hi - lo)));
+  const teach = st === "SAFE_STOP", dis = teach ? "" : "disabled";
+  $("armnote").textContent = "orange = where it is, grey = where it is going";
+  setHTML($("joints"), Object.keys(a.pos).map(j => { const [lo, hi] = a.limits[j], pct = v => Math.min(100, Math.max(0, 100 * (v - lo) / (hi - lo)));
     const h = a.health[j] || {}, unit = j === "gripper" ? "%" : "°";
     return `<div class="joint"><span>${j}</span><div class="track"><i class="tgt" style="left:${pct(a.target[j])}%"></i><i class="pos" style="left:${pct(a.pos[j])}%"></i></div>
-      <span class="mono">${a.pos[j].toFixed(1)}${unit} <span class="dim">${h.temp_c ?? "?"}°C ${h.load_pct === undefined ? "" : h.load_pct.toFixed(0) + "% load"}</span></span>
-      <span><button ${teach ? "" : "disabled"} onclick="jog('${j}',-5)">−5</button> <button ${teach ? "" : "disabled"} onclick="jog('${j}',5)">+5</button></span></div>`; }).join("");
-  $("poses").innerHTML = Object.keys(S.poses).map(n => `<div class="row"><b style="width:70px">${n}</b>
-    <button ${teach ? "" : "disabled"} onclick="post('/api/pose/goto',{name:'${n}'})">Go there</button>
-    <button ${teach ? "" : "disabled"} onclick="if(confirm('Overwrite pose ${n} with the arm\\'s current position?'))post('/api/pose/save',{name:'${n}'})">Save current as ${n}</button>
-    <span class="mono dim">${Object.values(S.poses[n]).join(", ")}</span></div>`).join("");
+      <span class="mono tnum">${a.pos[j].toFixed(1)}${unit} <span class="muted">${h.temp_c ?? "?"}°C${h.load_pct === undefined ? "" : " · " + h.load_pct.toFixed(0) + "% load"}</span></span>
+      <span><button class="btn sm icon" ${dis} onclick="jog('${j}',-5)" title="−5">−</button> <button class="btn sm icon" ${dis} onclick="jog('${j}',5)" title="+5">+</button></span></div>`; }).join(""));
+  setHTML($("poses"), Object.keys(S.poses).map(n => `<div class="pose"><b>${esc(n)}</b>
+    <button class="btn sm" ${dis} onclick="post('/api/pose/goto',{name:'${n}'}).catch(()=>{})">Go there</button>
+    <button class="btn sm" ${dis} onclick="if(confirm('Overwrite pose ${n} with the arm\\'s current position?'))post('/api/pose/save',{name:'${n}'}).catch(()=>{})">Save current</button>
+    <span class="mono muted">${Object.values(S.poses[n]).join(", ")}</span></div>`).join(""));
 
-  $("events").innerHTML = S.events.map(e => `<tr><td class="mono dim">${e.time}</td><td class="mono">${e.state}</td><td>${esc(e.message)}</td></tr>`).join("");
-  $("i-status").textContent = S.capture.running ? `saving… ${S.capture.saved} images` : "";
-  $("d-start").disabled = S.demo_mode;
+  setHTML($("events"), S.events.map(e => `<tr><td class="mono muted tnum">${esc(e.time)}</td><td><span class="badge">${esc(e.state)}</span></td><td class="dim">${esc(e.message)}</td></tr>`).join(""));
+
+  const ses = S.session, cap = S.capture, lab = $("lab-status");
+  const labText = ses.open ? `RECORDING EPISODE ${ses.episode}/${ses.num_episodes}`
+    : ses.starting ? "LAB · STARTING SESSION" : cap.running ? `SAVING PICTURES · ${cap.saved}` : "";
+  lab.hidden = !labText; lab.querySelector("span").textContent = labText;
+  lab.title = ses.open ? `Recording into ${ses.dataset}` : cap.running ? `${cap.dataset}/${cap.label}` : "";
   drawMap();
 }
-window.jog = (joint, delta) => post("/api/arm/jog", {joint, delta});
+window.jog = (joint, delta) => post("/api/arm/jog", {joint, delta}).catch(() => {});
 
 function drawMap() {
-  const c = $("map"), g = c.getContext("2d"), cx = c.width / 2, cy = c.height - 30, R = 150;
-  g.clearRect(0, 0, c.width, c.height);
+  const c = $("map"), dpr = window.devicePixelRatio || 1, W = 300, H = 230;
+  if (c.width !== W * dpr) { c.width = W * dpr; c.height = H * dpr; }
+  const g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const cx = W / 2, cy = H - 30, R = 150;
+  g.clearRect(0, 0, W, H);
   const at = (pan, r) => [cx + r * Math.sin(pan * Math.PI / 180), cy - r * Math.cos(pan * Math.PI / 180)];
   const [lo, hi] = S.arm.limits.shoulder_pan;
-  g.strokeStyle = "#30363f"; g.lineWidth = 1; g.beginPath();
+  g.strokeStyle = C.g800; g.lineWidth = 1; g.beginPath();
   g.arc(cx, cy, R, (lo - 90) * Math.PI / 180, (hi - 90) * Math.PI / 180); g.stroke();
-  g.fillStyle = "#98a1ad"; g.font = "11px sans-serif"; g.fillText("pan 0°", cx - 16, cy - R - 6);
-  const ray = (pan, r, colour, width, dash = []) => { g.strokeStyle = colour; g.lineWidth = width; g.setLineDash(dash);
+  g.beginPath(); g.arc(cx, cy, R / 2, (lo - 90) * Math.PI / 180, (hi - 90) * Math.PI / 180); g.stroke();
+  g.fillStyle = C.g500; g.font = "11px ui-sans-serif, system-ui, sans-serif"; g.textAlign = "center"; g.fillText("pan 0°", cx, cy - R - 6);
+  g.textAlign = "left";
+  const ray = (pan, r, colour, width, dash = []) => { g.strokeStyle = colour; g.lineWidth = width; g.setLineDash(dash); g.lineCap = "round";
     g.beginPath(); g.moveTo(cx, cy); g.lineTo(...at(pan, r)); g.stroke(); g.setLineDash([]); };
-  if (S.voice_pan !== null) ray(S.voice_pan, R, "#e65adc", 2, [5, 4]);
+  if (S.voice_pan !== null) ray(S.voice_pan, R, C.pink, 2, [5, 4]);
   if (S.request.yogurt_pan !== null) { const [x, y] = at(S.request.yogurt_pan, 70); g.fillStyle = "#fff"; g.fillRect(x - 5, y - 5, 10, 10); }
   const other = new Set(S.request.others.map(p => p.id)), req = S.request.requester, tgt = S.request.target;
   S.faces.forEach(f => { const [x, y] = at(f.pan, R - 14);
-    g.fillStyle = req && f.id === req.id ? "#5ad25a" : other.has(f.id) ? "#3ea0e6" : "#98a1ad";
-    g.beginPath(); g.arc(x, y, 6 + Math.min(6, f.mouth * 40), 0, 7); g.fill(); g.fillText("#" + f.id, x + 10, y + 4); });
-  if (tgt) { const [x, y] = at(tgt.pan, R - 14); g.strokeStyle = "#ffd23f"; g.lineWidth = 2; g.beginPath(); g.arc(x, y, 13, 0, 7); g.stroke(); }
-  ray(S.arm.target.shoulder_pan, 60, "#3ea0e6", 1);
-  ray(S.arm.pos.shoulder_pan, 95, "#ff9d2e", 5);
-  g.fillStyle = "#e6e8eb"; g.beginPath(); g.arc(cx, cy, 7, 0, 7); g.fill();
+    g.fillStyle = req && f.id === req.id ? C.green : other.has(f.id) ? C.blue : C.g400;
+    g.beginPath(); g.arc(x, y, 6 + Math.min(6, f.mouth * 40), 0, 7); g.fill();
+    g.fillStyle = C.g400; g.fillText("#" + f.id, x + 12, y + 4); });
+  if (tgt) { const [x, y] = at(tgt.pan, R - 14); g.strokeStyle = C.amber; g.lineWidth = 2; g.beginPath(); g.arc(x, y, 13, 0, 7); g.stroke(); }
+  ray(S.arm.target.shoulder_pan, 60, C.g500, 1);
+  ray(S.arm.pos.shoulder_pan, 95, C.orange, 5);
+  g.fillStyle = C.g200; g.beginPath(); g.arc(cx, cy, 6, 0, 7); g.fill();
 }
 
 async function poll() {
-  try { S = await get("/api/status"); render(); }
-  catch (e) { $("detail").innerHTML = '<span class="bad">Lost contact with the robot program.</span>'; }
+  try { S = await get("/api/status"); $("lost").style.display = "none"; render(); }
+  catch (e) { $("lost").style.display = "block"; }
   setTimeout(poll, 250);
 }
 
-// ---- data collection ----
-async function refreshData() {
-  const d = await get("/api/data"), n = d.counts; prompts = d.prompts; shots = d.shots;
-  $("n-wake").textContent = `· ${n["wake_word/positive"]} positive, ${n["wake_word/negative"]} negative, ${n["wake_word/background"]} background`;
-  $("n-images").textContent = "· " + Object.entries(d.image_sets).flatMap(([s, ls]) => ls.map(l => `${n[s + "/" + l]} ${s}/${l}`)).join(", ");
-  $("n-demos").textContent = `· ${n["grasp_act/episodes"]} saved`;
-  $("n-label").textContent = `(${n["yogurt_detection/labelled"]} of ${n["yogurt_detection/images"]} done)`;
-  if (!$("i-set").options.length) Object.entries(d.image_sets).forEach(([s, ls]) => ls.forEach(l => $("i-set").add(new Option(`${s} / ${l}`, `${s}/${l}`))));
-  showPhrase(); showShots();
-}
-function showShots() { $("i-shots").innerHTML = (shots[$("i-set").value] || []).map(s => `<li>${esc(s)}</li>`).join(""); }
-$("i-set").onchange = showShots;
-function showPhrase() { if (!prompts) return; const label = $("a-label").value;
-  const list = label === "positive" ? prompts.positive : label === "negative" ? prompts.negative : prompts.background;
-  $("a-phrase").textContent = list[promptIndex % list.length]; }
-$("a-label").onchange = () => { promptIndex = 0; $("a-seconds").value = $("a-label").value === "background" ? 30 : 2; showPhrase(); };
-$("a-record").onclick = async () => {
-  const seconds = +$("a-seconds").value, label = $("a-label").value; $("a-record").disabled = true;
-  const t0 = Date.now(), tick = setInterval(() => $("a-status").textContent = `recording… ${Math.max(0, seconds - (Date.now() - t0) / 1000).toFixed(1)} s`, 100);
-  try { const j = await post("/api/collect/audio", {label, seconds, phrase: label === "background" ? "" : $("a-phrase").textContent});
-    $("a-status").textContent = `saved ${j.file} (peak ${j.peak}${j.peak < 0.02 ? " — very quiet!" : ""})`; promptIndex++; refreshData(); }
-  finally { clearInterval(tick); $("a-record").disabled = false; }
-};
-$("i-start").onclick = () => { const [dataset, label] = $("i-set").value.split("/"); post("/api/collect/images", {dataset, label, per_second:+$("i-rate").value}); };
-$("i-stop").onclick = () => post("/api/collect/images", {stop:true}).then(refreshData);
-$("d-start").onclick = () => post("/api/demos/start");
-
-// ---- box labelling ----
-let current = null, box = null, drag = null;
-async function nextImage() {
-  const j = await get("/api/label/next"); current = j.image; box = j.proposal;
-  if (!current) { $("l-img").removeAttribute("src"); $("l-status").textContent = "Nothing left to label."; drawBox(); return; }
-  $("l-img").src = "/api/label/image/" + current.split("/").map(encodeURIComponent).join("/");
-  $("l-status").textContent = current + (box ? " — suggested box shown, redraw it if wrong" : " — drag a box around the cup");
-  $("l-img").onload = drawBox;
-}
-function drawBox() { const b = $("box"), im = $("l-img"); if (!box || !current) { b.style.display = "none"; return; }
-  const [x1, y1, x2, y2] = box; b.style.display = "block"; b.style.left = x1 * im.clientWidth + "px"; b.style.top = y1 * im.clientHeight + "px";
-  b.style.width = (x2 - x1) * im.clientWidth + "px"; b.style.height = (y2 - y1) * im.clientHeight + "px"; }
-const frac = e => { const r = $("l-img").getBoundingClientRect(); return [Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))]; };
-$("labeller").onmousedown = e => { if (current) { drag = frac(e); e.preventDefault(); } };
-window.onmousemove = e => { if (!drag) return; const [x, y] = frac(e); box = [Math.min(drag[0], x), Math.min(drag[1], y), Math.max(drag[0], x), Math.max(drag[1], y)]; drawBox(); };
-window.onmouseup = () => drag = null;
-$("l-save").onclick = async () => { if (!current || !box) return flash("Drag a box first."); await post("/api/label", {image:current, box}); nextImage(); refreshData(); };
-$("l-none").onclick = async () => { if (!current) return; await post("/api/label", {image:current, box:null}); nextImage(); refreshData(); };
-$("label-panel").ontoggle = e => { if (e.target.open) nextImage(); };
-
-poll(); refreshData(); setInterval(refreshData, 10000);
+poll();
 </script>
 </body>
 </html>

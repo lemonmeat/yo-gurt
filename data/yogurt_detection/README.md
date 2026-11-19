@@ -4,22 +4,24 @@ Check sweeps the wrist camera across the table and stops when this model sees a 
 ready-made model (`uv run python -m yogurt.train.detector pretrained`) only knows "cup" in general;
 this dataset teaches a model your cup, through your wide-angle lens.
 
-## 1. Take pictures (UI → Data collection → 2 · Wrist images → `yogurt_detection / images`)
+## 1. Take pictures (Lab → Wrist images → Yogurt detector)
 
-1. Press SAFE STOP, then in the Arm panel **Go there** for `survey`. This is the view Check has.
-2. Put the cup on the table, press **Start saving** (2 per second is fine), and jog `shoulder_pan`
-   with the −5 / +5 buttons so the cup crosses the whole picture. Press **Stop**.
-3. Move the cup and repeat. Work through the list the UI shows under the buttons
+1. Press SAFE STOP, then **Survey pose** under "Put the arm in place". This is the view Check has.
+2. Put the cup on the table, press **Start saving** (2 per second is fine), and turn the arm with
+   **Pan −5° / Pan +5°** so the cup crosses the whole picture. Press **Stop saving**.
+3. Move the cup and repeat. Work through the list the Lab shows under the buttons
    (distances, rotations, clutter, lighting, and some bursts with no cup at all).
 
 Aim for 250+ pictures with the cup and 50+ without, in at least 6 separate bursts (each
 Start/Stop makes its own folder, and whole folders are held out to test the model honestly).
 
-## 2. Draw the boxes (UI → Data collection → 4 · Draw boxes)
+## 2. Draw the boxes (Lab → Wrist images → Yogurt detector → **Draw boxes**)
 
-Each picture appears in turn. Drag a tight box around the cup and press **Save box**, or press
-**No yogurt in this picture**. If a detector is already loaded its guess is drawn for you; redraw
-it when it is wrong. Boxes are stored in `labels/` in YOLO format, mirroring `images/`.
+Each unlabelled picture appears in turn. Drag a tight box around the cup and press **Save box**
+(Enter), or **No yogurt in this picture** (N). If a detector is already loaded its guess is drawn
+dashed; save it if it fits, redraw it if not. Click any picture in a burst to check or correct its
+box later (**Forget the label** removes it). Boxes are stored in `labels/` in YOLO format, mirroring
+`images/`; deleting a picture in the Lab deletes its box too.
 
 ## 3. Train
 

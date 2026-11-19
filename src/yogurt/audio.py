@@ -128,7 +128,14 @@ class Mic:
 
         self.close()
         try:
-            device = find_mic(self.cfg.device)
+            try:
+                device = find_mic(self.cfg.device)
+            except RuntimeError:
+                # PortAudio lists devices once, when it starts: refresh it in case the microphone was
+                # plugged in since (safe here, this is the only stream and it was just closed).
+                sd._terminate()
+                sd._initialize()
+                device = find_mic(self.cfg.device)
             self.channels = min(2, sd.query_devices(device)["max_input_channels"])
             self._stream = sd.InputStream(device=device, channels=self.channels, samplerate=self.rate,
                                           blocksize=int(self.rate * BLOCK_S), dtype="float32",

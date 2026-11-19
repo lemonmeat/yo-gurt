@@ -1,0 +1,1689 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Yo-gurt Lab</title>
+<style>
+  /* LeLab's look (Tailwind's gray scale on black, orange accent), in plain CSS. */
+  :root { --hdr:57px; --g950:#030712; --g900:#111827; --g800:#1f2937; --g700:#374151; --g600:#4b5563;
+          --g500:#6b7280; --g400:#9ca3af; --g300:#d1d5db; --g200:#e5e7eb; --orange:#f97316; --orange4:#fb923c;
+          --red:#ef4444; --red4:#f87171; --red3:#fca5a5; --green:#22c55e; --green4:#4ade80; --blue:#3b82f6;
+          --blue3:#93c5fd; --amber:#f59e0b; --amber3:#fcd34d; --series:#3987e5; }
+  * { box-sizing:border-box; }
+  [hidden] { display:none !important; }
+  body { margin:0; background:#000; color:#fff; font:14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  button, input, select { font:inherit; color:inherit; }
+  .mono { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .muted { color:var(--g500); } .dim { color:var(--g400); } .tnum { font-variant-numeric:tabular-nums; }
+  svg.i { width:16px; height:16px; flex:none; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  svg.i.s { width:14px; height:14px; }
+
+  header { position:sticky; top:0; z-index:30; display:flex; align-items:center; gap:10px; padding:10px 24px;
+           background:#000; border-bottom:1px solid var(--g800); flex-wrap:wrap; }
+  header h1 { font-size:18px; font-weight:600; margin:0; display:flex; align-items:center; gap:8px; letter-spacing:-.01em; }
+  header h1 svg { color:var(--orange); width:20px; height:20px; }
+  .grow { flex:1; }
+  .pill { display:inline-flex; align-items:center; gap:8px; padding:4px 12px; border-radius:999px; font-size:11px;
+          font-weight:700; letter-spacing:.1em; background:rgba(107,114,128,.15); color:var(--g300); white-space:nowrap; }
+  .pill i { width:8px; height:8px; border-radius:50%; background:var(--g500); }
+  .pill.red { background:rgba(239,68,68,.15); color:var(--red3); } .pill.red i { background:var(--red); }
+  .pill.orange { background:rgba(249,115,22,.15); color:#fdba74; } .pill.orange i { background:var(--orange); }
+  .pill.blue { background:rgba(59,130,246,.15); color:var(--blue3); } .pill.blue i { background:var(--blue); }
+  .pill.amber { background:rgba(245,158,11,.15); color:var(--amber3); } .pill.amber i { background:var(--amber); }
+  .pill.pulse i { animation:pulse 2s cubic-bezier(.4,0,.6,1) infinite; }
+  @keyframes pulse { 50% { opacity:.4; } }
+
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:36px; padding:0 12px;
+         border-radius:6px; border:1px solid var(--g800); background:var(--g950); color:var(--g300); font-size:12px;
+         cursor:pointer; white-space:nowrap; text-decoration:none; }
+  .btn:hover:not(:disabled) { background:var(--g900); color:#fff; }
+  .btn:disabled { opacity:.4; cursor:default; }
+  .btn.ghost { border-color:transparent; background:transparent; color:var(--g400); }
+  .btn.ghost:hover:not(:disabled) { background:var(--g900); }
+  .btn.danger { border-color:rgba(239,68,68,.4); color:var(--red4); }
+  .btn.danger:hover:not(:disabled) { border-color:var(--red4); background:rgba(239,68,68,.1); color:var(--red3); }
+  .btn.solid-red { background:var(--red); border-color:var(--red); color:#fff; }
+  .btn.solid-red:hover:not(:disabled) { background:#dc2626; }
+  .btn.icon { width:36px; padding:0; }
+  .btn.sm { height:28px; padding:0 8px; }
+  #safe { background:var(--amber); border-color:var(--amber); color:#111; font-weight:700; font-size:13px; }
+  #safe:hover { background:#d97706; color:#111; }
+  #kill { background:var(--red); border-color:var(--red); color:#fff; font-weight:700; font-size:13px; padding:0 18px; }
+  #kill:hover { background:#dc2626; color:#fff; }
+  .key { margin-left:10px; padding:2px 8px; border-radius:4px; font:12px ui-monospace, monospace; background:rgba(0,0,0,.35); color:rgba(255,255,255,.7); }
+
+  main { max-width:1400px; margin:0 auto; padding:20px 24px 96px; }
+  .card { border:1px solid var(--g800); background:var(--g950); border-radius:8px; }
+  .toolbar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:20px; }
+  .toolbar h2 { margin:0; font-size:20px; font-weight:600; letter-spacing:-.01em; display:flex; align-items:center; gap:8px; }
+  select.picker { height:36px; min-width:300px; max-width:100%; border:1px solid var(--g800); background:var(--g950);
+                  border-radius:6px; padding:0 10px; color:#fff; }
+  .stats { display:flex; flex-wrap:wrap; gap:4px 20px; padding:10px 16px; margin-bottom:16px; font-size:12px; }
+  .stat span:first-child { font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:var(--g600); margin-right:6px; }
+  .stat span:last-child { color:var(--g200); font-weight:500; font-variant-numeric:tabular-nums; }
+  .layout { display:grid; grid-template-columns:280px 1fr; gap:16px; align-items:start; }
+  @media (max-width:1000px) { .layout { grid-template-columns:1fr; } }
+  .empty { padding:48px; text-align:center; color:var(--g400); }
+  .empty svg { width:32px; height:32px; color:var(--g700); margin-bottom:8px; }
+  .error { display:flex; gap:8px; align-items:flex-start; border:1px solid rgba(127,29,29,.5); background:rgba(69,10,10,.3);
+           border-radius:8px; padding:14px 16px; color:var(--red4); font-size:13px; margin-bottom:16px; }
+  .error b { color:var(--red3); display:block; }
+  .warnbox { border:1px solid #b45309; background:rgba(120,53,15,.4); color:#fef3c7; border-radius:8px; padding:10px 14px; font-size:13px; margin:8px 0; }
+  .spin { width:16px; height:16px; border-radius:50%; border:2px solid var(--g700); border-top-color:var(--g300); animation:spin 1s linear infinite; display:inline-block; }
+  .spin.big { width:48px; height:48px; border-color:transparent; border-bottom-color:var(--red); }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  /* episode list */
+  .lhead { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--g800); min-height:41px;
+           font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--g500); }
+  .lhead .count { margin-left:auto; color:var(--g600); font-variant-numeric:tabular-nums; }
+  .lhead .sel { text-transform:none; letter-spacing:0; color:var(--g300); font-size:12px; }
+  #eplist { max-height:calc(100vh - 300px); overflow-y:auto; }
+  .ep { display:flex; align-items:center; border-bottom:1px solid var(--g900); }
+  .ep:last-child { border-bottom:0; }
+  .ep:hover { background:var(--g900); } .ep.on { background:rgba(31,41,55,.8); }
+  .ep input { margin:0 0 0 12px; accent-color:var(--orange); cursor:pointer; }
+  .ep button.go { flex:1; min-width:0; display:flex; align-items:center; gap:8px; padding:8px 12px 8px 10px; background:none; border:0;
+                  text-align:left; cursor:pointer; }
+  .ep .n { width:28px; font-size:12px; color:var(--g500); font-variant-numeric:tabular-nums; }
+  .ep.on .n { color:var(--orange4); font-weight:600; }
+  .ep .t { flex:1; min-width:0; font-size:12px; color:var(--g300); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ep .d { font-size:11px; color:var(--g500); font-variant-numeric:tabular-nums; }
+
+  /* episode viewer */
+  .vhead { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:12px 16px; border-bottom:1px solid var(--g800); }
+  .vhead b { font-size:15px; }
+  .stage { position:relative; background:#000; display:flex; justify-content:center; }
+  .stage video { display:block; width:100%; max-height:52vh; background:#000; }
+  .stage .tag { position:absolute; left:10px; top:8px; font-size:11px; color:var(--g300); background:rgba(0,0,0,.6); padding:2px 8px; border-radius:4px; }
+  .stage .verr { position:absolute; inset:0; display:none; align-items:center; justify-content:center; padding:24px; text-align:center; color:var(--red4); }
+  .controls { display:flex; align-items:center; gap:6px; padding:10px 16px; flex-wrap:wrap; }
+  .controls input[type=range] { flex:1; min-width:160px; accent-color:var(--orange); }
+  .rate.on { border-color:var(--orange); color:var(--orange4); }
+  .jtitle { padding:4px 16px 6px; font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--g500); }
+  #joints { padding:0 16px 14px; cursor:crosshair; }
+  .jrow { display:grid; grid-template-columns:110px 1fr 70px; gap:10px; align-items:center; height:36px; }
+  .jrow span:first-child { font-size:12px; color:var(--g400); }
+  .jrow canvas { width:100%; height:32px; display:block; }
+  .jrow span:last-child { text-align:right; font-size:12px; color:var(--g200); font-variant-numeric:tabular-nums; }
+  .train { margin-top:16px; padding:14px 16px; }
+  .train code { display:block; margin-top:8px; padding:10px 12px; border-radius:6px; background:#000; border:1px solid var(--g800);
+                color:var(--g300); font-size:12px; white-space:pre-wrap; word-break:break-all; user-select:all; }
+
+  /* recording screen (LeLab's Recording page) */
+  .rec { max-width:1280px; margin:0 auto; }
+  .reccard { background:var(--g900); border:1px solid var(--g700); border-radius:8px; padding:24px; }
+  .rectop { display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:12px; flex-wrap:wrap; }
+  .epbox { display:flex; align-items:baseline; gap:8px; background:var(--g800); border-radius:8px; padding:8px 16px; }
+  .epbox .l { font-size:12px; font-weight:700; letter-spacing:.1em; color:var(--g400); }
+  .epbox .v { font-size:30px; font-weight:700; line-height:1; }
+  .epbox .of { font-size:20px; font-weight:600; line-height:1; color:var(--g500); }
+  .sess { display:flex; align-items:baseline; gap:8px; color:var(--g400); }
+  .sess .l { font-size:12px; font-weight:700; letter-spacing:.1em; color:var(--g500); }
+  .sess .v { font-size:20px; color:var(--g300); }
+  .center { text-align:center; }
+  #r-detail { color:var(--g300); font-size:15px; margin:10px auto 12px; max-width:900px; min-height:45px; }
+  .feed { display:flex; justify-content:center; margin-bottom:12px; }
+  .feed img { max-width:100%; max-height:44vh; border-radius:8px; border:1px solid var(--g700); background:#000; }
+  .timer { display:flex; align-items:baseline; justify-content:center; gap:12px; }
+  .timer .big { font-size:72px; font-weight:700; line-height:1; }
+  .timer .lim { font-size:30px; font-weight:600; line-height:1; color:var(--g500); }
+  #r-caption { font-size:14px; color:var(--g400); margin-top:8px; letter-spacing:.01em; }
+  .bar { height:6px; border-radius:999px; background:var(--g800); margin:14px 0 16px; overflow:hidden; }
+  .bar i { display:block; height:100%; width:0; border-radius:999px; transition:width .25s linear; }
+  .actions { display:flex; gap:12px; }
+  .bigbtn { flex:1; display:flex; align-items:center; justify-content:center; gap:8px; padding:20px 16px; border:0; border-radius:6px;
+            font-size:18px; font-weight:600; color:#fff; cursor:pointer; background:var(--g500); }
+  .bigbtn:disabled { opacity:.5; cursor:default; }
+  .bigbtn.green { background:var(--green); } .bigbtn.green:hover:not(:disabled) { background:#16a34a; }
+  .bigbtn.orange { background:var(--orange); } .bigbtn.orange:hover:not(:disabled) { background:#ea580c; }
+  .bigbtn.blue { background:#2563eb; } .bigbtn.blue:hover:not(:disabled) { background:#1d4ed8; }
+  .bigbtn.amber { background:#d97706; } .bigbtn.amber:hover:not(:disabled) { background:#b45309; }
+  .rerec { flex:none; padding:20px 24px; border:1px solid var(--g600); background:var(--g800); border-radius:6px; color:#fff;
+           font-size:18px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:8px; }
+  .rerec:hover:not(:disabled) { background:var(--g700); } .rerec:disabled { opacity:.4; cursor:default; }
+  .recfoot { margin-top:14px; font-size:12px; color:var(--g500); text-align:center; }
+
+  /* dialogs: below the header, so SAFE STOP and KILL stay clickable */
+  .overlay { position:fixed; left:0; right:0; bottom:0; top:var(--hdr); z-index:20; background:rgba(0,0,0,.75);
+             display:flex; align-items:center; justify-content:center; padding:16px; }
+  .overlay[hidden] { display:none; }
+  .dialog { background:var(--g900); border:1px solid var(--g700); border-radius:8px; padding:24px; width:100%; max-width:520px;
+            max-height:calc(100vh - var(--hdr) - 32px); overflow-y:auto; }
+  .dialog.wide { max-width:600px; padding:32px; }
+  .dialog:focus { outline:none; }
+  .dialog h3 { margin:0 0 8px; font-size:18px; font-weight:600; }
+  .dialog.wide h3 { text-align:center; font-size:24px; font-weight:700; }
+  .dialog p { margin:0 0 12px; color:var(--g400); font-size:14px; }
+  .dialog .foot { display:flex; justify-content:flex-end; gap:8px; margin-top:20px; }
+  .dialog .foot .btn { height:40px; padding:0 16px; font-size:14px; }
+  .btn.cancel { background:var(--g800); border-color:var(--g700); color:#fff; }
+  .btn.cancel:hover:not(:disabled) { background:var(--g700); }
+  label.f { display:block; font-size:13px; font-weight:500; color:var(--g300); margin:14px 0 6px; }
+  .dialog input[type=text], .dialog input[type=number] { width:100%; height:40px; padding:0 12px; border-radius:6px;
+            border:1px solid var(--g700); background:var(--g800); color:#fff; }
+  .dialog input:focus, select.picker:focus, .btn:focus-visible { outline:2px solid var(--orange); outline-offset:1px; }
+  .hint { font-size:12px; color:var(--g500); margin-top:4px; }
+  .hint.bad { color:var(--red4); }
+  .grid3 { display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; }
+  .grid3 label.f { margin-top:14px; }
+
+  /* tabs */
+  nav.tabs { display:flex; gap:2px; margin-left:12px; }
+  nav.tabs button { background:none; border:0; color:var(--g400); padding:8px 12px; border-radius:6px; font-size:13px; cursor:pointer;
+                    position:relative; display:inline-flex; align-items:center; gap:6px; }
+  nav.tabs button:hover:not(:disabled) { color:#fff; background:var(--g900); }
+  nav.tabs button.on { color:#fff; }
+  nav.tabs button.on::after { content:""; position:absolute; left:12px; right:12px; bottom:-11px; height:2px; background:var(--orange); }
+  nav.tabs button:disabled { opacity:.4; cursor:default; }
+  .live { width:8px; height:8px; border-radius:50%; background:var(--red); animation:pulse 1.5s infinite; }
+  .pad { padding:16px; }
+  .cols2 { display:grid; grid-template-columns:minmax(0, 1fr) minmax(0, 1fr); gap:16px; margin-bottom:16px; align-items:start; }
+  @media (max-width:1000px) { .cols2 { grid-template-columns:1fr; } }
+  .ctitle { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--g500); margin:0 0 10px; }
+  .ctitle.mt { margin-top:20px; }
+  .seg { display:inline-flex; border:1px solid var(--g800); border-radius:8px; overflow:hidden; flex-wrap:wrap; }
+  .seg button { background:var(--g950); border:0; border-right:1px solid var(--g800); color:var(--g400); padding:8px 14px; font-size:13px; cursor:pointer; }
+  .seg button:last-child { border-right:0; }
+  .seg button:hover { color:#fff; }
+  .seg button.on { background:var(--g800); color:#fff; }
+  .seg button .c { color:var(--g500); margin-left:6px; font-variant-numeric:tabular-nums; }
+  .phrasebox { display:flex; align-items:stretch; gap:8px; margin:14px 0; }
+  .phrase { flex:1; text-align:center; font-size:28px; font-weight:700; padding:16px 12px; border-radius:8px; background:#000;
+            border:1px solid var(--g800); min-height:84px; display:flex; align-items:center; justify-content:center; }
+  .phrase.room { font-size:18px; font-weight:500; color:var(--g400); }
+  .recrow { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  input.num { width:84px; height:36px; padding:0 10px; border-radius:6px; border:1px solid var(--g700); background:var(--g800); color:#fff; }
+  input.search { height:30px; padding:0 10px; border-radius:6px; border:1px solid var(--g800); background:#000; color:#fff; min-width:160px; }
+  .bigred { height:48px; padding:0 22px; font-size:16px; font-weight:600; border-radius:6px; border:0; background:var(--red); color:#fff;
+            cursor:pointer; display:inline-flex; align-items:center; gap:8px; }
+  .bigred:hover:not(:disabled) { background:#dc2626; } .bigred:disabled { opacity:.5; cursor:default; }
+  .bigred.stop { background:var(--g600); } .bigred.stop:hover:not(:disabled) { background:var(--g500); }
+  .meter { height:6px; border-radius:999px; background:var(--g800); overflow:hidden; margin-top:12px; }
+  .meter i { display:block; height:100%; width:0; background:var(--red); }
+  .lastclip { margin-top:12px; padding:10px 12px; border-radius:8px; background:#000; border:1px solid var(--g800); font-size:13px;
+              display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .prog { display:grid; grid-template-columns:150px 1fr 140px; gap:10px; align-items:center; margin:8px 0; font-size:13px; color:var(--g300); }
+  .prog .track { height:8px; border-radius:999px; background:var(--g800); overflow:hidden; }
+  .prog .track i { display:block; height:100%; background:var(--series); border-radius:999px; }
+  .prog .track i.full { background:var(--green); }
+  .prog span:last-child { text-align:right; color:var(--g300); font-variant-numeric:tabular-nums; font-size:12px; }
+  .modelline { font-size:13px; color:var(--g300); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .ok { color:var(--green4); } .warnt { color:var(--amber3); } .badt { color:var(--red4); }
+  .cmd { display:block; margin-top:8px; padding:10px 12px; border-radius:6px; background:#000; border:1px solid var(--g800);
+         color:var(--g300); font-size:12px; white-space:pre-wrap; word-break:break-all; user-select:all; }
+  .cliplist { max-height:62vh; overflow-y:auto; }
+  table.clips { width:100%; border-collapse:collapse; font-size:13px; }
+  table.clips td { padding:6px 10px; border-top:1px solid var(--g900); vertical-align:middle; }
+  table.clips tr:hover td { background:var(--g900); } table.clips tr.on td { background:rgba(31,41,55,.8); }
+  table.clips input { accent-color:var(--orange); cursor:pointer; }
+  .badge { display:inline-block; padding:1px 8px; border-radius:999px; font-size:11px; background:var(--g800); color:var(--g300); white-space:nowrap; }
+  .badge.positive { background:rgba(34,197,94,.15); color:var(--green4); }
+  .badge.negative { background:rgba(239,68,68,.15); color:var(--red3); }
+  .badge.background { background:rgba(59,130,246,.15); color:var(--blue3); }
+  .feedbox { position:relative; background:#000; border-radius:8px; overflow:hidden; border:1px solid var(--g800); aspect-ratio:16/9; }
+  .feedbox img { display:block; width:100%; height:100%; object-fit:contain; }
+  .feedbox .tag { position:absolute; left:10px; bottom:8px; font-size:11px; color:var(--g300); background:rgba(0,0,0,.6); padding:2px 8px; border-radius:4px; }
+  .helpers { display:flex; flex-wrap:wrap; gap:6px; }
+  ul.shots { margin:0; padding-left:18px; color:var(--g400); font-size:13px; } ul.shots li { margin:3px 0; }
+  .burst { display:flex; align-items:center; gap:10px; padding:8px 12px; border-bottom:1px solid var(--g900); cursor:pointer; }
+  .burst:hover { background:var(--g900); } .burst.on { background:rgba(31,41,55,.8); }
+  .burst img, .burst .noimg { width:64px; height:36px; object-fit:cover; border-radius:4px; background:#000; flex:none; }
+  .burst .bn { font-size:12px; color:var(--g300); } .burst .bm { font-size:11px; color:var(--g500); }
+  .burst.on .bn { color:var(--orange4); font-weight:600; }
+  #ib-list { max-height:calc(100vh - 320px); overflow-y:auto; }
+  .ihead { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:10px 12px; border-bottom:1px solid var(--g800); min-height:53px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:8px; padding:12px; max-height:calc(100vh - 300px); overflow-y:auto; }
+  .tile { position:relative; border-radius:6px; overflow:hidden; background:#000; border:2px solid transparent; cursor:zoom-in; aspect-ratio:16/9; }
+  .tile img { width:100%; height:100%; object-fit:contain; display:block; }
+  .tile.on { border-color:var(--orange); }
+  .tile input { position:absolute; left:6px; top:6px; accent-color:var(--orange); width:16px; height:16px; cursor:pointer; margin:0; }
+  .tile .n { position:absolute; right:6px; bottom:4px; font-size:10px; color:#fff; background:rgba(0,0,0,.6); padding:0 5px; border-radius:3px; }
+  .tile .bx { position:absolute; border:2px solid var(--amber); pointer-events:none; }
+  .tile .bd { position:absolute; left:6px; bottom:4px; font-size:10px; padding:0 6px; border-radius:3px; background:rgba(0,0,0,.7); color:var(--g300); }
+  .tile .bd.un { color:var(--amber3); }
+  .dialog.viewer { max-width:1200px; padding:16px; }
+  .ivhead { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  .ivstage { display:flex; justify-content:center; background:#000; border-radius:6px; user-select:none; }
+  .ivwrap { position:relative; display:inline-block; }
+  .ivwrap img { display:block; max-width:100%; max-height:calc(100vh - var(--hdr) - 230px); -webkit-user-drag:none; }
+  .ivstage.draw .ivwrap { cursor:crosshair; }
+  #iv-box { position:absolute; border:2px solid var(--amber); pointer-events:none; }
+  #iv-box.sug { border-style:dashed; border-color:var(--blue3); }
+  .ivtools { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px; }
+
+  #toasts { position:fixed; right:16px; bottom:16px; z-index:40; display:flex; flex-direction:column; gap:8px; width:380px; max-width:calc(100% - 32px); }
+  .toast { border:1px solid var(--g700); background:var(--g900); border-radius:8px; padding:14px 16px; box-shadow:0 10px 30px rgba(0,0,0,.5); }
+  .toast b { display:block; font-size:14px; } .toast span { font-size:13px; color:var(--g400); }
+  .toast.bad { background:#7f1d1d; border-color:#991b1b; } .toast.bad span { color:#fecaca; }
+  #lost { display:none; background:var(--red); color:#fff; padding:8px 24px; font-weight:600; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-db" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></symbol>
+  <symbol id="i-disc" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="2"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-first" viewBox="0 0 24 24"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" x2="5" y1="19" y2="5"/></symbol>
+  <symbol id="i-skip" viewBox="0 0 24 24"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" x2="19" y1="5" y2="19"/></symbol>
+  <symbol id="i-redo" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></symbol>
+  <symbol id="i-vol" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/></symbol>
+  <symbol id="i-mute" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="22" x2="16" y1="9" y2="15"/><line x1="16" x2="22" y1="9" y2="15"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></symbol>
+  <symbol id="i-cam" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+</svg>
+
+<header id="hdr">
+  <a class="btn ghost" href="/" title="Back to the robot page"><svg class="i"><use href="#i-back"/></svg>Robot</a>
+  <h1><svg class="i"><use href="#i-db"/></svg>Yo-gurt Lab</h1>
+  <nav class="tabs" id="tabs">
+    <button data-tab="grasp">Grasp demonstrations</button>
+    <button data-tab="images">Wrist images <span class="live" id="tab-cap" hidden title="Saving pictures"></span></button>
+    <button data-tab="wake">Wake word</button>
+  </nav>
+  <div class="grow"></div>
+  <span class="pill" id="robot-pill" title=""><i></i><span>…</span></span>
+  <button class="btn" id="safe" title="Freeze the arm where it is, servos stay powered (Space)">SAFE STOP</button>
+  <button class="btn" id="kill" title="Release all servos and disconnect everything (Esc)">KILL</button>
+</header>
+<div id="lost">Lost contact with the robot program.</div>
+
+<!-- ============================== browse ============================== -->
+<main id="browse">
+  <div class="toolbar">
+    <h2><svg class="i" style="color:var(--orange)"><use href="#i-db"/></svg>Grasp demonstrations</h2>
+    <div class="grow"></div>
+    <select class="picker" id="picker" aria-label="Dataset"></select>
+    <button class="btn" id="b-new"><svg class="i s"><use href="#i-plus"/></svg>New dataset</button>
+    <button class="btn" id="b-more"><svg class="i s" style="color:var(--red)"><use href="#i-disc"/></svg>Record more</button>
+    <button class="btn icon danger" id="b-deldata" aria-label="Delete this dataset from disk" title="Delete this dataset from disk"><svg class="i s"><use href="#i-trash"/></svg></button>
+  </div>
+
+  <div id="b-empty" class="card empty" hidden>
+    <svg class="i"><use href="#i-db"/></svg>
+    <div>No grasp datasets yet.</div>
+    <div class="muted" style="font-size:12px;margin:4px 0 16px">Datasets live in <span class="mono">data/grasp_act/</span>, one LeRobot dataset per folder.</div>
+    <button class="btn" id="b-new2"><svg class="i s" style="color:var(--red)"><use href="#i-disc"/></svg>Record a new dataset</button>
+  </div>
+  <div id="b-loading" class="card empty" hidden><span class="spin"></span> Reading dataset…</div>
+  <div id="b-error" class="error" hidden><svg class="i"><use href="#i-alert"/></svg><div><b>Could not read this dataset</b><span id="b-error-text"></span></div></div>
+
+  <div id="b-body" hidden>
+    <div class="card stats" id="stats"></div>
+    <div class="layout">
+      <div class="card">
+        <div class="lhead" id="lhead"></div>
+        <div id="eplist"></div>
+      </div>
+      <div class="card" id="viewer">
+        <div class="vhead">
+          <b id="v-title">Episode</b><span class="dim tnum" id="v-meta"></span>
+          <span class="muted" id="v-task" style="font-size:12px"></span>
+          <div class="grow"></div>
+          <button class="btn sm" id="v-prev" title="Previous episode (↑)"><svg class="i s"><use href="#i-left"/></svg>Prev</button>
+          <button class="btn sm" id="v-next" title="Next episode (↓)">Next<svg class="i s"><use href="#i-right"/></svg></button>
+          <button class="btn sm danger" id="v-del"><svg class="i s"><use href="#i-trash"/></svg>Delete episode</button>
+        </div>
+        <div class="stage"><video id="vid" muted playsinline preload="auto"></video><span class="tag" id="v-cam">wrist</span>
+          <div class="verr" id="v-err">This browser cannot play the dataset's video (LeRobot stores it as AV1).
+            Use Chrome, or Safari on an M3 Mac or newer.</div></div>
+        <div class="controls">
+          <button class="btn icon sm" id="c-first" title="First frame"><svg class="i s"><use href="#i-first"/></svg></button>
+          <button class="btn icon sm" id="c-back" title="Previous frame (←)"><svg class="i s"><use href="#i-left"/></svg></button>
+          <button class="btn icon sm" id="c-play" title="Play / pause"><svg class="i s"><use href="#i-play"/></svg></button>
+          <button class="btn icon sm" id="c-fwd" title="Next frame (→)"><svg class="i s"><use href="#i-right"/></svg></button>
+          <input type="range" id="c-scrub" min="0" max="0" value="0" aria-label="Frame">
+          <span class="mono dim" id="c-frame" style="font-size:12px;min-width:150px;text-align:right"></span>
+          <button class="btn sm rate" data-rate="0.5">0.5×</button><button class="btn sm rate on" data-rate="1">1×</button><button class="btn sm rate" data-rate="2">2×</button>
+        </div>
+        <div class="jtitle">Joints — what the leader arm commanded (the policy's training target). Hover to read, click to jump.</div>
+        <div id="joints"></div>
+      </div>
+    </div>
+    <div class="card train">
+      <div class="dim" style="font-size:13px">Train the grasp policy on this dataset
+        <button class="btn sm" id="t-copy" style="margin-left:8px"><svg class="i s"><use href="#i-copy"/></svg>Copy</button></div>
+      <code class="mono" id="t-cmd"></code>
+      <div class="hint">Use <span class="mono">--policy.device=mps</span> on an Apple laptop or <span class="mono">cpu</span> anywhere, then copy
+        <span class="mono">outputs/…/checkpoints/last/pretrained_model</span> to <span class="mono">models/act_grasp</span> (see data/grasp_act/README.md).</div>
+    </div>
+  </div>
+</main>
+
+<!-- ============================== recording ============================== -->
+<main id="record" hidden>
+  <div class="rec">
+    <div id="r-starting" class="reccard center" hidden style="padding:64px">
+      <div class="spin big"></div>
+      <p style="font-size:18px;margin:16px 0 0">Starting the recording session…</p>
+      <p class="dim">Connecting the leader arm and opening the dataset.</p>
+    </div>
+
+    <div id="r-done" class="reccard center" hidden style="padding:48px">
+      <h3 style="font-size:24px;margin:0 0 8px" id="d-title">Session complete</h3>
+      <p class="dim" id="d-text" style="font-size:15px"></p>
+      <div style="display:flex;gap:12px;justify-content:center;margin-top:24px">
+        <button class="btn" id="d-browse" style="height:40px;font-size:14px">Browse the dataset</button>
+        <button class="btn ghost" id="d-close" style="height:40px;font-size:14px">Back to datasets</button>
+      </div>
+    </div>
+
+    <div id="r-live" class="reccard" hidden>
+      <div class="rectop">
+        <div class="epbox" id="r-epbox"><span class="l">EPISODE</span><span class="v tnum" id="r-ep">1</span><span class="of tnum" id="r-of">/ 1</span></div>
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <span class="dim" style="font-size:12px" id="r-dataset"></span>
+          <div class="sess"><span class="l">SESSION</span><span class="v mono" id="r-session">00:00</span></div>
+          <button class="btn ghost icon" id="r-mute" aria-label="Mute"><svg class="i"><use href="#i-vol"/></svg></button>
+          <button class="btn danger" id="r-stop"><svg class="i s"><use href="#i-stop"/></svg>Stop recording</button>
+        </div>
+      </div>
+      <div class="center"><span class="pill pulse" id="r-pill" role="status" aria-live="polite"><i></i><span></span></span></div>
+      <div class="center" id="r-detail"></div>
+      <div id="r-paused" class="warnbox" hidden>Paused: the robot is in Safe Stop. Nothing is being recorded and the take in progress was
+        discarded. <b>Resume</b> starts episode <span id="r-paused-ep"></span> again from Check — the arm moves by itself.</div>
+      <div class="feed"><img id="r-feed" alt="wrist camera"></div>
+      <div class="center">
+        <div class="timer"><span class="big mono" id="r-timer">00:00</span><span class="lim mono" id="r-limit"></span></div>
+        <div id="r-caption"></div>
+      </div>
+      <div class="bar"><i id="r-bar"></i></div>
+      <div class="actions">
+        <button class="bigbtn" id="r-primary"><span id="r-primary-label">…</span><span class="key" id="r-primary-key">→</span></button>
+        <button class="rerec" id="r-rerec"><svg class="i"><use href="#i-redo"/></svg>Re-record<span class="key">DEL / ←</span></button>
+      </div>
+      <div class="recfoot">Space = SAFE STOP (pauses the session) · Esc = KILL · Episodes are only kept when you end them yourself:
+        one that runs out of time is discarded and recorded again.</div>
+    </div>
+  </div>
+</main>
+
+<!-- ============================== wrist images ============================== -->
+<main id="images" hidden>
+  <div class="toolbar">
+    <h2><svg class="i" style="color:var(--orange)"><use href="#i-cam"/></svg>Wrist images</h2>
+    <div class="grow"></div>
+    <select class="picker" id="i-set" aria-label="Image set"></select>
+  </div>
+  <div class="cols2">
+    <div class="card pad">
+      <div class="ctitle">Capture</div>
+      <div class="feedbox"><img id="i-feed" alt="live camera"><span class="tag" id="i-feed-tag">live wrist camera — the saved pictures have no overlays</span></div>
+      <div class="recrow" style="margin-top:12px">
+        <button class="bigred" id="i-capture"><svg class="i"><use href="#i-disc"/></svg><span>Start saving</span></button>
+        <input type="number" class="num" id="i-rate" min="0.2" max="10" step="0.2" value="2" aria-label="Pictures per second"><span class="dim">pictures per second</span>
+      </div>
+      <div class="hint" id="i-capstat" style="font-size:13px;margin-top:8px"></div>
+      <div class="ctitle mt">Put the arm in place</div>
+      <div class="hint" id="i-helper-hint" style="font-size:13px;color:var(--g400);margin:0 0 8px"></div>
+      <div class="helpers" id="i-helpers"></div>
+      <div class="ctitle mt">One short burst for each of these</div>
+      <ul class="shots" id="i-shots"></ul>
+    </div>
+    <div class="card pad">
+      <div class="ctitle">Progress</div>
+      <div id="i-progress"></div>
+      <div id="i-labelling" style="margin-top:12px"></div>
+      <div class="ctitle mt">Train</div>
+      <div class="modelline" id="i-model"></div>
+      <code class="cmd mono" id="i-cmd"></code>
+      <div class="hint" id="i-train-hint"></div>
+    </div>
+  </div>
+  <div class="layout">
+    <div class="card">
+      <div class="lhead"><span>Bursts</span><span class="count" id="ib-count"></span></div>
+      <div id="ib-list"></div>
+    </div>
+    <div class="card">
+      <div class="ihead" id="ib-head"></div>
+      <div class="grid" id="ib-grid"></div>
+    </div>
+  </div>
+</main>
+
+<!-- ============================== wake word ============================== -->
+<main id="wake" hidden>
+  <div class="toolbar">
+    <h2><svg class="i" style="color:var(--orange)"><use href="#i-mic"/></svg>Wake word — “Yo, gurt”</h2>
+    <div class="grow"></div>
+    <span class="dim" id="w-mic" style="font-size:12px"></span>
+  </div>
+  <div class="cols2">
+    <div class="card pad">
+      <div class="ctitle">Record a clip</div>
+      <div class="seg" id="w-labels"></div>
+      <div class="hint" id="w-hint" style="font-size:13px;color:var(--g400);margin-top:10px"></div>
+      <div class="phrasebox">
+        <button class="btn icon" id="w-prev" title="Previous phrase"><svg class="i s"><use href="#i-left"/></svg></button>
+        <div class="phrase" id="w-phrase"></div>
+        <button class="btn icon" id="w-next" title="Skip this phrase"><svg class="i s"><use href="#i-right"/></svg></button>
+      </div>
+      <div class="recrow">
+        <button class="bigred" id="w-record"><svg class="i"><use href="#i-disc"/></svg><span>Record</span></button>
+        <input type="number" class="num" id="w-seconds" min="0.5" max="120" step="0.5" aria-label="Clip length in seconds"><span class="dim">seconds</span>
+        <span class="dim" id="w-status"></span>
+      </div>
+      <div class="meter"><i id="w-meter"></i></div>
+      <div id="w-last"></div>
+    </div>
+    <div class="card pad">
+      <div class="ctitle">Progress</div>
+      <div id="w-progress"></div>
+      <div class="ctitle mt">Train</div>
+      <div class="modelline" id="w-model"></div>
+      <code class="cmd mono" id="w-cmd"></code>
+      <div class="hint">About five minutes on a laptop. Then press Reload models (Safe Stop) or restart. See data/wake_word/README.md.</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="ihead" id="w-head"></div>
+    <div class="cliplist"><table class="clips"><tbody id="w-rows"></tbody></table></div>
+  </div>
+</main>
+
+<!-- ============================== dialogs ============================== -->
+<div class="overlay" id="dlg-image" hidden>
+  <div class="dialog viewer" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="iv-title">
+    <div class="ivhead">
+      <b id="iv-title"></b><span class="dim tnum" id="iv-pos"></span>
+      <div class="grow"></div>
+      <button class="btn sm" id="iv-prev" title="Previous picture (←)"><svg class="i s"><use href="#i-left"/></svg>Prev</button>
+      <button class="btn sm" id="iv-next" title="Next picture (→)">Next<svg class="i s"><use href="#i-right"/></svg></button>
+      <button class="btn sm danger" id="iv-del" title="Delete this picture (Delete)"><svg class="i s"><use href="#i-trash"/></svg>Delete</button>
+      <button class="btn sm icon ghost" data-close aria-label="Close (Esc)"><svg class="i s"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="ivstage" id="iv-stage"><div class="ivwrap" id="iv-wrap"><img id="iv-img" alt=""><div id="iv-box" hidden></div></div></div>
+    <div class="ivtools" id="iv-tools">
+      <button class="btn" id="iv-save" title="Enter">Save box</button>
+      <button class="btn" id="iv-none" title="N">No yogurt in this picture</button>
+      <button class="btn ghost" id="iv-clear">Forget the label</button>
+      <span class="dim" id="iv-status" style="font-size:13px"></span>
+      <div class="grow"></div>
+      <label class="dim" style="font-size:12px"><input type="checkbox" id="iv-auto" style="accent-color:var(--orange)"> after saving, jump to the next unlabelled picture</label>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="dlg-confirm" hidden>
+  <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="cf-title">
+    <h3 id="cf-title"></h3>
+    <p id="cf-text"></p>
+    <div class="foot">
+      <button class="btn cancel" data-close>Keep</button>
+      <button class="btn solid-red" id="cf-go">Delete</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="dlg-record" hidden>
+  <div class="dialog wide" role="dialog" aria-modal="true" aria-labelledby="f-title">
+    <h3 id="f-title">Record grasp demonstrations</h3>
+    <p id="f-desc" class="center"></p>
+    <div id="f-alerts"></div>
+    <div id="f-name-row">
+      <label class="f" for="f-name">Dataset name</label>
+      <input type="text" id="f-name" autocomplete="off" spellcheck="false">
+      <div class="hint" id="f-name-hint"></div>
+    </div>
+    <label class="f" for="f-task">Task</label>
+    <input type="text" id="f-task" autocomplete="off">
+    <div class="hint">Stored with every episode. The ACT policy does not read it; it documents what was demonstrated.</div>
+    <div class="grid3">
+      <div><label class="f" for="f-n">Episodes</label><input type="number" id="f-n" min="1" max="200" step="1"></div>
+      <div><label class="f" for="f-ep">Episode time (s)</label><input type="number" id="f-ep" min="3" max="600" step="1"></div>
+      <div><label class="f" for="f-reset">Reset time (s)</label><input type="number" id="f-reset" min="0" max="600" step="1"></div>
+    </div>
+    <div class="hint">End each episode yourself before its time runs out, or it is discarded and recorded again.
+      Reset 0 = wait until you press Start Next Episode.</div>
+    <div class="hint bad" id="f-error"></div>
+    <div class="foot">
+      <button class="btn cancel" data-close>Cancel</button>
+      <button class="btn solid-red" id="f-start"><svg class="i s"><use href="#i-disc"/></svg>Start recording</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="dlg-delep" hidden>
+  <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="de-title">
+    <h3 id="de-title">Delete episode?</h3>
+    <p id="de-text"></p>
+    <div class="foot">
+      <button class="btn cancel" data-close>Keep</button>
+      <button class="btn solid-red" id="de-go">Delete</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="dlg-deldata" hidden>
+  <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dd-title">
+    <h3 id="dd-title">Delete dataset from disk?</h3>
+    <p id="dd-text"></p>
+    <label class="f" for="dd-confirm">Type <span class="mono" id="dd-name" style="color:#fff"></span> to confirm</label>
+    <input type="text" id="dd-confirm" autocomplete="off" spellcheck="false">
+    <div class="foot">
+      <button class="btn cancel" data-close>Keep dataset</button>
+      <button class="btn solid-red" id="dd-go" disabled>Delete</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="dlg-stop" hidden>
+  <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="st-title">
+    <h3 id="st-title">Stop recording?</h3>
+    <p>Episodes already saved are kept. A take in progress is discarded. The arm stops and holds where it is (Safe Stop).</p>
+    <div class="foot">
+      <button class="btn cancel" data-close>Keep recording</button>
+      <button class="btn solid-red" id="st-go">Stop</button>
+    </div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = t => String(t ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const enc = encodeURIComponent;
+const mmss = s => { s = Math.max(0, Math.floor(s)); return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); };
+const secs = s => s == null ? "—" : s < 60 ? s.toFixed(1) + " s" : mmss(s);
+
+// Addresses are built from location.origin: browsers refuse fetch() with relative addresses on a page
+// that was opened with the password in the URL.
+async function get(path) {
+  const r = await fetch(location.origin + path);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || j.error) throw new Error(j.error || `request failed (${r.status})`);
+  return j;
+}
+async function post(path, body = {}) {
+  const r = await fetch(location.origin + path, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || j.error) throw new Error(j.error || `request failed (${r.status})`);
+  return j;
+}
+function toast(title, text = "", bad = false) {
+  const t = document.createElement("div");
+  t.className = "toast" + (bad ? " bad" : "");
+  t.innerHTML = `<b>${esc(title)}</b>${text ? `<span>${esc(text)}</span>` : ""}`;
+  $("toasts").appendChild(t);
+  setTimeout(() => t.remove(), bad ? 9000 : 5000);
+}
+const tryPost = (path, body, title) => post(path, body).catch(e => { toast(title, e.message, true); throw e; });
+
+// ---------------------------------------------------------------- safety, always on top
+const go = state => tryPost("/api/state", {state}, "Could not change state").catch(() => {});
+$("safe").onclick = () => go("SAFE_STOP");
+$("kill").onclick = () => go("KILLED");
+new ResizeObserver(() => document.documentElement.style.setProperty("--hdr", $("hdr").offsetHeight + "px")).observe($("hdr"));
+
+// ---------------------------------------------------------------- dialogs
+const openDialogs = [];
+function openDialog(id) {
+  const d = $(id); d.hidden = false; if (!openDialogs.includes(id)) openDialogs.push(id);
+  // a text field to type in, else the dialog's main button (Enter confirms), else the dialog itself
+  const first = d.querySelector("input[type=text]:not([disabled]), input[type=number]:not([disabled]), .foot .btn:not(.cancel)") || d.querySelector(".dialog");
+  first.focus();
+}
+// typing in a text field must not trigger shortcuts; a focused checkbox or button must not swallow them
+const typing = el => el.tagName === "TEXTAREA" || el.tagName === "SELECT" || (el.tagName === "INPUT" && !["checkbox", "radio", "button", "range"].includes(el.type));
+function closeDialog(id) { if ($(id).dataset.busy) return; $(id).hidden = true; const i = openDialogs.indexOf(id); if (i >= 0) openDialogs.splice(i, 1); }
+document.querySelectorAll(".overlay").forEach(o => {
+  o.addEventListener("mousedown", e => { if (e.target === o) closeDialog(o.id); });
+  o.querySelectorAll("[data-close]").forEach(b => b.onclick = () => closeDialog(o.id));
+});
+
+// ---------------------------------------------------------------- tabs and addresses
+// #grasp/<dataset>/<episode> · #images/<dataset>/<label>/<burst> · #wake/<filter>
+const TABS = ["grasp", "images", "wake"];
+function readHash() {
+  const parts = location.hash.slice(1).split("/").filter(x => x !== "").map(x => { try { return decodeURIComponent(x); } catch { return x; } });
+  return TABS.includes(parts[0]) ? {tab:parts[0], rest:parts.slice(1)} : {tab:"grasp", rest:parts};
+}
+const START = readHash();
+let tab = START.tab;
+const writeHash = (...parts) => history.replaceState(null, "", "#" + parts.filter(x => x !== null && x !== undefined && x !== "").map(x => enc(String(x))).join("/"));
+document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => { if (!b.disabled) { tab = b.dataset.tab; if (S) render(); } });
+
+// ---------------------------------------------------------------- status polling
+let S = null, view = null, sawSession = false, showSummary = false;
+async function poll() {
+  try { S = await get("/api/status"); $("lost").style.display = "none"; render(); }
+  catch (e) { $("lost").style.display = "block"; }
+  setTimeout(poll, 250);
+}
+
+function render() {
+  const p = $("robot-pill"), st = S.state;
+  p.className = "pill " + (st === "KILLED" ? "red" : st === "SAFE_STOP" ? "amber" : "blue");
+  p.querySelector("span").textContent = "ROBOT · " + st.replace("_", " ");
+  p.title = S.detail;
+  const ses = S.session;
+  if (ses.open || ses.starting) { sawSession = true; showSummary = false; }
+  else if (sawSession) { sawSession = false; showSummary = !!ses.last; afterSession(ses.last); }
+  const sessionView = ses.open || ses.starting || showSummary;
+  document.querySelectorAll("#tabs button").forEach(b => { b.disabled = sessionView; b.classList.toggle("on", !sessionView && b.dataset.tab === tab); });
+  $("tab-cap").hidden = !S.capture.running;
+  setView(sessionView ? "record" : tab);
+  if (view === "record") renderRecording(ses);
+  else if (view === "grasp") renderBrowseButtons();
+  else if (view === "images") renderImagesLive();
+  else if (view === "wake") renderWakeLive();
+}
+
+function setView(v) {
+  if (v === view) return;
+  const was = view;
+  view = v;
+  [["browse", "grasp"], ["record", "record"], ["images", "images"], ["wake", "wake"]].forEach(([id, name]) => $(id).hidden = v !== name);
+  if (was === "grasp") pauseVideo();
+  if (was === "wake") stopClip();
+  if (v !== "record") feed(false);
+  imageFeed(v === "images");
+  if (v === "grasp") loadDatasets();
+  if (v === "images") { writeHash("images", iset ? dsOf(iset) : null, iset ? lbOf(iset) : null, burst); loadImages(); }
+  if (v === "wake") { writeHash("wake", wfilter === "all" ? null : wfilter); loadWake(); }
+}
+
+// ---------------------------------------------------------------- sounds (LeLab's cues)
+const MUTE_KEY = "yogurt.lab.muted";
+let audio = null;
+const muted = () => localStorage.getItem(MUTE_KEY) === "1";
+function tone(freq, ms, at = 0) {
+  if (muted()) return;
+  try { audio = audio || new AudioContext(); } catch { return; }
+  const o = audio.createOscillator(), g = audio.createGain(), t0 = audio.currentTime + at / 1000, t1 = t0 + ms / 1000;
+  o.frequency.value = freq; o.connect(g); g.connect(audio.destination);
+  g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(0.2, t0 + 0.01); g.gain.setValueAtTime(0.2, t1 - 0.02); g.gain.linearRampToValueAtTime(0, t1);
+  o.start(t0); o.stop(t1);
+}
+const cueRecord = () => { tone(660, 80); tone(880, 80, 90); };
+const cueReset = () => { tone(660, 80); tone(440, 80, 90); };
+const cueWarn = () => { tone(880, 70); tone(880, 70, 1000); tone(880, 70, 2000); };
+function drawMute() { $("r-mute").innerHTML = `<svg class="i"><use href="#i-${muted() ? "mute" : "vol"}"/></svg>`; $("r-mute").setAttribute("aria-label", muted() ? "Unmute" : "Mute"); }
+$("r-mute").onclick = () => { localStorage.setItem(MUTE_KEY, muted() ? "0" : "1"); drawMute(); };
+drawMute();
+
+// ---------------------------------------------------------------- recording screen
+const PHASES = {
+  preparing:   {pill:"PREPARING", colour:"", caption:"Getting ready", button:"Preparing…"},
+  positioning: {pill:"FINDING THE CUP", colour:"blue", caption:"Check: the arm looks for the cup and centres on it", button:"Cup is centred", key:true},
+  syncing:     {pill:"MATCH THE LEADER ARM", colour:"blue", caption:"Waiting for the leader arm to match the follower", button:"Waiting for the leader arm…"},
+  recording:   {pill:"RECORDING EPISODE {n}", colour:"red", button:"End Episode", key:true},
+  saving:      {pill:"SAVING EPISODE {n}", colour:"", caption:"Saving the episode", button:"Saving…"},
+  resetting:   {pill:"RESET — GET READY", colour:"orange", button:"Start Next Episode", key:true},
+  paused:      {pill:"PAUSED — SAFE STOP", colour:"amber", caption:"Paused", button:"Resume"},
+};
+const COLOURS = {red:{timer:"var(--green4)", bar:"var(--green)", button:"green"}, orange:{timer:"var(--orange4)", bar:"var(--orange)", button:"orange"},
+                 blue:{timer:"var(--blue3)", bar:"var(--blue)", button:"blue"}, amber:{timer:"var(--amber3)", bar:"var(--amber)", button:"amber"},
+                 "":{timer:"var(--g400)", bar:"var(--g500)", button:""}};
+let lastPhaseId = null, warnedPhaseId = null, pressed = null;
+
+function renderRecording(ses) {
+  $("r-starting").hidden = !ses.starting;
+  $("r-live").hidden = !ses.open;
+  $("r-done").hidden = !(showSummary && !ses.open && !ses.starting);
+  feed(ses.open);
+  if (!ses.open) return;
+
+  const ph = PHASES[ses.phase] || {pill:ses.phase.toUpperCase(), colour:"", button:"…"};
+  const c = COLOURS[ph.colour];
+  if (ses.phase_id !== lastPhaseId) {
+    if (lastPhaseId !== null && ses.phase === "recording") cueRecord();
+    if (lastPhaseId !== null && ses.phase === "resetting") cueReset();
+    lastPhaseId = ses.phase_id; pressed = null;
+  }
+  const limit = ses.phase_limit_s, elapsed = ses.phase_elapsed_s;
+  if (limit && limit > 3 && elapsed >= limit - 3 && warnedPhaseId !== ses.phase_id) { cueWarn(); warnedPhaseId = ses.phase_id; }
+
+  $("r-ep").textContent = ses.episode;
+  $("r-of").textContent = "/ " + ses.num_episodes;
+  $("r-epbox").setAttribute("aria-label", `Episode ${ses.episode} of ${ses.num_episodes}`);
+  $("r-dataset").textContent = `${ses.dataset} · ${ses.dataset_episodes} episode${ses.dataset_episodes === 1 ? "" : "s"} saved in it`;
+  $("r-session").textContent = mmss(ses.session_elapsed_s);
+  const pill = $("r-pill");
+  pill.className = "pill pulse " + ph.colour;
+  pill.querySelector("span").textContent = ph.pill.replace("{n}", ses.episode);
+  $("r-detail").textContent = S.detail;
+  $("r-paused").hidden = ses.phase !== "paused";
+  $("r-paused-ep").textContent = ses.episode;
+
+  $("r-timer").textContent = mmss(elapsed);
+  $("r-timer").style.color = c.timer;
+  $("r-limit").textContent = limit ? "/ " + mmss(limit) : "";
+  let caption = ph.caption || "";
+  if (ses.phase === "recording") caption = `Episode ${ses.episode} recording time — end it before ${mmss(ses.episode_time_s)} or the take is discarded`;
+  if (ses.phase === "resetting") caption = ses.done ? "All episodes recorded: put the cup down, then Finish"
+    : limit ? "Reset time — when it runs out the arm moves to the survey pose by itself" : "Reset — no time limit: press Start Next Episode when ready";
+  $("r-caption").textContent = caption;
+  $("r-bar").style.width = limit ? Math.min(100, 100 * elapsed / limit) + "%" : "0%";
+  $("r-bar").style.background = c.bar;
+
+  const label = ses.phase === "resetting" && ses.done ? "Finish Session" : ph.button;
+  const enabled = ["positioning", "recording", "resetting", "paused"].includes(ses.phase) && pressed !== ses.phase_id;
+  $("r-primary").className = "bigbtn " + c.button;
+  $("r-primary").disabled = !enabled;
+  $("r-primary-label").textContent = label;
+  $("r-primary-key").hidden = !ph.key;
+  $("r-rerec").disabled = ses.phase !== "recording" || pressed === ses.phase_id;
+}
+
+function feed(on) {  // the wrist stream only runs while it is on screen
+  const img = $("r-feed");
+  if (on && !img.getAttribute("src")) img.src = location.origin + "/video/wrist";
+  if (!on && img.getAttribute("src")) img.removeAttribute("src");
+}
+
+async function sessionAction(action) {
+  const ses = S && S.session;
+  if (!ses || !ses.open || pressed === ses.phase_id) return;
+  pressed = ses.phase_id;  // one press per phase: a double click must not also end the next phase
+  renderRecording(ses);
+  try { await post("/api/lab/session", {action, phase:ses.phase}); }
+  catch (e) { pressed = null; toast("Not done", e.message, true); }
+}
+$("r-primary").onclick = () => sessionAction(S.session.phase === "paused" ? "resume" : "next");
+$("r-rerec").onclick = () => sessionAction("rerecord");
+$("r-stop").onclick = () => openDialog("dlg-stop");
+$("st-go").onclick = async () => {
+  const d = $("dlg-stop"); d.dataset.busy = "1"; $("st-go").disabled = true; $("st-go").textContent = "Stopping…";
+  try { await post("/api/lab/session", {action:"stop"}); }
+  catch (e) { toast("Could not stop the session", e.message, true); }
+  finally { delete d.dataset.busy; $("st-go").disabled = false; $("st-go").textContent = "Stop"; closeDialog("dlg-stop"); }
+};
+
+let summaryDataset = null;
+function afterSession(last) {
+  closeDialog("dlg-stop");
+  if (!last) return;
+  summaryDataset = last.kept ? last.dataset : null;
+  $("d-title").textContent = last.reason === "all episodes recorded" ? "Session complete" : "Session ended";
+  let text = `${last.saved} episode${last.saved === 1 ? "" : "s"} saved to ${last.dataset}`;
+  if (last.total != null && last.kept) text += ` (it now has ${last.total})`;
+  text += `. Ended because: ${last.reason}.`;
+  if (last.note) text += ` Note: ${last.note}.`;
+  $("d-text").textContent = text;
+  $("d-browse").hidden = !summaryDataset;
+}
+$("d-browse").onclick = () => { showSummary = false; wanted = {name:summaryDataset, episode:null}; tab = "grasp"; render(); };
+$("d-close").onclick = () => { showSummary = false; tab = "grasp"; render(); };
+
+// ---------------------------------------------------------------- record dialog (LeLab's RecordingModal)
+let LIST = null, appendTo = null;
+const FORM_KEY = "yogurt.lab.form";
+function stamp() { const d = new Date(), p = n => String(n).padStart(2, "0");
+  return `grasp_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`; }
+const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+
+function blockers() {
+  const out = [];
+  if (!S) return ["no contact with the robot program"];
+  if (S.hardware["leader arm"] === "not configured") out.push(`No leader arm configured: set leader.port in config/hardware_${S.machine}.yaml (see data/grasp_act/README.md).`);
+  if (!S.arm.connected) out.push("The arm is disconnected: press Reconnect hardware on the robot page.");
+  if (!["SAFE_STOP", "IDLE"].includes(S.state)) out.push(`The robot is busy (${S.state}): press SAFE STOP first.`);
+  if (S.hardware["wrist camera"] !== "ok") out.push(`The wrist camera is not working: ${S.hardware["wrist camera"]}.`);
+  return out;
+}
+function openRecord(target) {
+  appendTo = target;
+  const saved = JSON.parse(localStorage.getItem(FORM_KEY) || "{}");
+  $("f-title").textContent = target ? "Record more episodes" : "Record grasp demonstrations";
+  $("f-desc").textContent = target
+    ? `New episodes are added after the ${target.episodes} already in ${target.name}.`
+    : "Each episode: the robot finds and centres the cup, you bring the leader arm to the follower's pose, then grasp the cup, lift it a little and hold still.";
+  $("f-name-row").hidden = !!target;
+  $("f-name").value = stamp();
+  $("f-task").value = saved.task || LIST.defaults.task;
+  $("f-n").value = saved.num_episodes || 10;
+  $("f-ep").value = saved.episode_time_s || 20;
+  $("f-reset").value = saved.reset_time_s ?? 15;
+  $("f-error").textContent = "";
+  checkForm();
+  openDialog("dlg-record");
+}
+function formValues() {
+  return {dataset: appendTo ? appendTo.name : $("f-name").value.trim(), new: !appendTo, task: $("f-task").value.trim(),
+          num_episodes: Number($("f-n").value), episode_time_s: Number($("f-ep").value), reset_time_s: Number($("f-reset").value)};
+}
+function checkForm() {
+  const v = formValues(), problems = blockers();
+  const names = new Set((LIST?.datasets || []).map(d => d.name.toLowerCase()));
+  let nameHint = `Saved in data/grasp_act/${v.dataset || "…"} as LeRobot dataset local/${v.dataset || "…"}.`, bad = false;
+  if (!appendTo && !NAME_RE.test(v.dataset)) { nameHint = `A name is ${LIST.name_rule}.`; bad = true; }
+  else if (!appendTo && names.has(v.dataset.toLowerCase())) { nameHint = "A dataset with this name already exists: pick it and press Record more instead."; bad = true; }
+  $("f-name-hint").textContent = nameHint;
+  $("f-name-hint").className = "hint" + (bad ? " bad" : "");
+  const whole = (x, lo, hi) => Number.isInteger(x) && x >= lo && x <= hi;
+  const numbersOk = whole(v.num_episodes, 1, 200) && whole(v.episode_time_s, 3, 600) && whole(v.reset_time_s, 0, 600);
+  $("f-error").textContent = numbersOk ? "" : "Episodes 1–200, episode time 3–600 s, reset time 0–600 s, whole numbers.";
+  const notes = problems.map(p => `<div class="warnbox">${esc(p)}</div>`);
+  if (!LIST.detector) notes.push(`<div class="warnbox">No yogurt detector yet, so the robot cannot find the cup itself: before each episode, put the cup in the middle of the wrist picture and press <b>Cup is centred</b>.</div>`);
+  $("f-alerts").innerHTML = notes.join("");
+  $("f-start").disabled = bad || !numbersOk || problems.length > 0 || !v.task;
+}
+["f-name", "f-task", "f-n", "f-ep", "f-reset"].forEach(id => $(id).addEventListener("input", checkForm));
+$("f-start").onclick = async () => {
+  const v = formValues(), d = $("dlg-record");
+  localStorage.setItem(FORM_KEY, JSON.stringify({task:v.task, num_episodes:v.num_episodes, episode_time_s:v.episode_time_s, reset_time_s:v.reset_time_s}));
+  try { audio = audio || new AudioContext(); } catch {}  // unlock sound with this click
+  d.dataset.busy = "1"; $("f-start").disabled = true; $("f-start").lastChild.textContent = "Starting…";
+  try { await post("/api/lab/record", v); delete d.dataset.busy; closeDialog("dlg-record"); }
+  catch (e) { $("f-error").textContent = e.message; }
+  finally { delete d.dataset.busy; $("f-start").lastChild.textContent = "Start recording"; checkForm(); }
+};
+$("b-new").onclick = $("b-new2").onclick = () => LIST && openRecord(null);
+$("b-more").onclick = () => { const d = currentListEntry(); if (d) openRecord(d); };
+
+// ---------------------------------------------------------------- browse: datasets
+let D = null, cur = null, marked = new Set(), wanted = parseHash(), J = null, loadToken = 0;
+function parseHash() {
+  if (START.tab !== "grasp") return {name:null, episode:null};
+  const [n, e] = START.rest;
+  return {name: n ?? null, episode: e === undefined || !/^\d+$/.test(e) ? null : Number(e)};
+}
+function setHash() { if (view === "grasp") writeHash("grasp", D ? D.name : null, D ? cur : null); }
+const currentListEntry = () => LIST && D && LIST.datasets.find(d => d.name === D.name);
+
+async function loadDatasets() {
+  try { LIST = await get("/api/lab/datasets"); }
+  catch (e) { toast("Could not list datasets", e.message, true); return; }
+  const pick = $("picker"), ds = LIST.datasets;
+  pick.innerHTML = ds.map(d => `<option value="${esc(d.name)}">${esc(d.name)} — ${d.episodes} episode${d.episodes === 1 ? "" : "s"}${d.problem ? " (unreadable)" : ""}${d.recording ? " (recording)" : ""}</option>`).join("");
+  $("b-empty").hidden = ds.length > 0;
+  pick.hidden = ds.length === 0;
+  const name = ds.some(d => d.name === wanted.name) ? wanted.name
+    : D && ds.some(d => d.name === D.name) ? D.name : (ds.find(d => !d.problem) || ds[0])?.name;  // newest readable one
+  if (!name) { D = null; $("b-body").hidden = $("b-error").hidden = $("b-loading").hidden = true; setHash(); renderBrowseButtons(); return; }
+  pick.value = name;
+  const episode = name === wanted.name ? wanted.episode : (D && D.name === name ? cur : null);
+  wanted = {name:null, episode:null};
+  await openDataset(name, episode);
+}
+$("picker").onchange = () => openDataset($("picker").value, null);
+
+async function openDataset(name, episode) {
+  const token = ++loadToken;
+  pauseVideo();
+  $("b-loading").hidden = false; $("b-body").hidden = true; $("b-error").hidden = true;
+  let d;
+  try { d = await get(`/api/lab/datasets/${enc(name)}`); }
+  catch (e) { if (token !== loadToken) return; $("b-loading").hidden = true; D = null; showError(e.message); renderBrowseButtons(); return; }
+  if (token !== loadToken) return;
+  $("b-loading").hidden = true;
+  const sameData = D && D.name === d.name;
+  D = d;
+  if (!sameData) marked = new Set();
+  marked = new Set([...marked].filter(i => i < D.total_episodes));
+  renderBrowseButtons();
+  if (D.problem) { showError(D.problem); setHash(); return; }
+  $("b-body").hidden = false;
+  renderStats();
+  const target = episode !== null && episode >= 0 && episode < D.episodes.length ? episode : 0;
+  selectEpisode(D.episodes.length ? target : null, true);
+}
+function showError(text) { $("b-error").hidden = false; $("b-error-text").textContent = text; $("b-body").hidden = true; }
+
+function renderBrowseButtons() {
+  const busy = !!(S && (S.session.open || S.session.starting)), entry = currentListEntry();
+  $("b-new").disabled = busy || !LIST;
+  $("b-more").disabled = busy || !entry || !!entry.problem || !D || !!D.problem;
+  $("b-deldata").disabled = busy || !D;
+  $("v-del").disabled = busy || !D || D.total_episodes < 2;
+  $("v-del").title = D && D.total_episodes < 2 ? "This is the dataset's only episode: delete the dataset instead" : "Delete this episode from the dataset";
+}
+
+function renderStats() {
+  const ep = D.episodes[cur];
+  const stat = (k, v) => `<span class="stat"><span>${k}</span><span>${esc(v)}</span></span>`;
+  $("stats").innerHTML = stat("Episodes", D.total_episodes) + stat("Frames", D.total_frames.toLocaleString()) + stat("FPS", D.fps)
+    + stat("Robot", D.robot_type || "—") + stat("Cameras", D.cameras.join(", ") || "—") + stat("On disk", `${D.size_mb} MB`)
+    + stat("Folder", D.path) + (ep ? stat("This episode", secs(ep.duration_s)) : "");
+  $("t-cmd").textContent = D.train_command;
+}
+
+function renderList() {
+  const n = D.episodes.length;
+  $("lhead").innerHTML = marked.size
+    ? `<span class="sel">${marked.size} selected</span><button class="btn sm ghost" id="m-clear">Clear</button>
+       <button class="btn sm danger" id="m-del" style="margin-left:auto"><svg class="i s"><use href="#i-trash"/></svg>Delete</button>`
+    : `<span>Episodes</span><span class="count">${n}</span>`;
+  if (marked.size) { $("m-clear").onclick = () => { marked.clear(); renderList(); }; $("m-del").onclick = () => askDeleteEpisodes([...marked]); }
+  $("eplist").innerHTML = D.episodes.map(e => `<div class="ep${e.index === cur ? " on" : ""}" data-i="${e.index}">
+      <input type="checkbox" aria-label="Select episode ${e.index}" ${marked.has(e.index) ? "checked" : ""}>
+      <button class="go" type="button"><span class="n">${e.index}</span><span class="t">${esc(e.tasks.join(", ") || "—")}</span><span class="d">${secs(e.duration_s)}</span></button></div>`).join("");
+  const on = $("eplist").querySelector(".ep.on");
+  if (on) on.scrollIntoView({block:"nearest"});
+}
+$("eplist").addEventListener("click", e => {
+  const row = e.target.closest(".ep"); if (!row) return;
+  const i = Number(row.dataset.i);
+  if (e.target.matches("input")) { e.target.checked ? marked.add(i) : marked.delete(i); renderList(); return; }
+  selectEpisode(i);
+});
+
+// ---------------------------------------------------------------- browse: one episode
+const vid = $("vid");
+let win = null, frame = 0, hoverFrame = null, playing = false;
+
+function selectEpisode(i, force = false) {
+  if (!D || i === null || i === undefined) { cur = null; setHash(); return; }
+  if (i === cur && !force) return;
+  pauseVideo();
+  cur = i; setHash();
+  const ep = D.episodes[i];
+  $("v-title").textContent = `Episode ${i}`;
+  $("v-meta").textContent = `· ${secs(ep.duration_s)} · ${ep.length} frames`;
+  $("v-task").textContent = ep.tasks.join(", ");
+  $("v-prev").disabled = i === 0; $("v-next").disabled = i === D.episodes.length - 1;
+  renderList(); renderStats(); renderBrowseButtons();
+  const cam = D.cameras.includes("wrist") ? "wrist" : D.cameras[0];
+  $("v-cam").textContent = cam || "no camera";
+  $("v-err").style.display = "none";
+  const v = ep.videos[cam];
+  win = {from:v.from, to:v.to, fps:D.fps, length:ep.length};
+  const url = `${location.origin}/api/lab/datasets/${enc(D.name)}/videos/${enc(cam)}/${v.chunk}/${v.file}?v=${D.version}`;
+  $("c-scrub").max = Math.max(0, ep.length - 1);
+  if (vid.dataset.url !== url) { vid.dataset.url = url; vid.src = url; vid.addEventListener("loadedmetadata", () => seekFrame(0), {once:true}); }
+  else seekFrame(0);
+  showFrame(0);
+  loadJoints(D.name, i);
+}
+vid.addEventListener("error", () => { if (vid.error && vid.getAttribute("src")) $("v-err").style.display = "flex"; });
+
+function seekFrame(f) {
+  if (!win) return;
+  f = Math.max(0, Math.min(win.length - 1, Math.round(f)));
+  // aim for the middle of the frame, so rounding can never land on its neighbour
+  if (vid.readyState >= 1) vid.currentTime = win.from + (f + 0.5) / win.fps;
+  showFrame(f);
+}
+function showFrame(f) {
+  frame = f;
+  $("c-scrub").value = f;
+  $("c-frame").textContent = win ? `frame ${f} / ${win.length - 1} · ${(f / win.fps).toFixed(2)} s` : "";
+  drawJoints();
+}
+function pauseVideo() { playing = false; vid.pause(); $("c-play").innerHTML = '<svg class="i s"><use href="#i-play"/></svg>'; }
+function playVideo() {
+  if (!win) return;
+  if (frame >= win.length - 1) seekFrame(0);
+  playing = true; vid.play().catch(() => pauseVideo());
+  $("c-play").innerHTML = '<svg class="i s"><use href="#i-pause"/></svg>';
+  requestAnimationFrame(tick);
+}
+function tick() {
+  if (!playing || !win) return;
+  // several episodes share one video file: loop inside this episode's window
+  if (vid.ended || vid.currentTime >= win.to - 0.5 / win.fps) vid.currentTime = win.from + 0.5 / win.fps;
+  const f = Math.max(0, Math.min(win.length - 1, Math.floor((vid.currentTime - win.from) * win.fps)));
+  if (f !== frame) showFrame(f);
+  requestAnimationFrame(tick);
+}
+$("c-play").onclick = () => playing ? pauseVideo() : playVideo();
+$("c-first").onclick = () => { pauseVideo(); seekFrame(0); };
+$("c-back").onclick = () => { pauseVideo(); seekFrame(frame - 1); };
+$("c-fwd").onclick = () => { pauseVideo(); seekFrame(frame + 1); };
+$("c-scrub").oninput = () => { pauseVideo(); seekFrame(Number($("c-scrub").value)); };
+document.querySelectorAll(".rate").forEach(b => b.onclick = () => {
+  vid.playbackRate = Number(b.dataset.rate);
+  document.querySelectorAll(".rate").forEach(x => x.classList.toggle("on", x === b));
+});
+vid.addEventListener("loadedmetadata", () => { const on = document.querySelector(".rate.on"); vid.playbackRate = Number(on.dataset.rate); });
+$("v-prev").onclick = () => cur > 0 && selectEpisode(cur - 1);
+$("v-next").onclick = () => D && cur < D.episodes.length - 1 && selectEpisode(cur + 1);
+
+// joint trace: one small chart per joint (each its own scale: degrees and gripper % never share an axis)
+async function loadJoints(name, i) {
+  J = null; $("joints").innerHTML = '<div class="muted" style="font-size:12px;padding:8px 0">Loading joints…</div>';
+  let j;
+  try { j = await get(`/api/lab/datasets/${enc(name)}/episodes/${i}/joints`); }
+  catch (e) { if (D && D.name === name && cur === i) $("joints").innerHTML = `<div class="hint bad">${esc(e.message)}</div>`; return; }
+  if (!D || D.name !== name || cur !== i) return;
+  J = j;
+  J.range = J.names.map((_, k) => { let lo = Infinity, hi = -Infinity;
+    for (const row of J.action) { lo = Math.min(lo, row[k]); hi = Math.max(hi, row[k]); }
+    if (hi - lo < 2) { const m = (hi + lo) / 2; lo = m - 1; hi = m + 1; }
+    return [lo, hi]; });
+  $("joints").innerHTML = J.names.map(n => `<div class="jrow"><span>${esc(n)}</span><canvas></canvas><span></span></div>`).join("");
+  drawJoints();
+}
+function drawJoints() {
+  if (!J) return;
+  const rows = $("joints").querySelectorAll(".jrow"), n = J.action.length, dpr = window.devicePixelRatio || 1;
+  const shown = hoverFrame ?? frame;
+  rows.forEach((row, k) => {
+    const cv = row.querySelector("canvas"), w = cv.clientWidth, h = cv.clientHeight;
+    if (!w) return;
+    if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+    const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+    const [lo, hi] = J.range[k], x = i => 1 + (n > 1 ? i / (n - 1) : 0) * (w - 2), y = v => h - 3 - (v - lo) / (hi - lo) * (h - 6);
+    g.strokeStyle = "#1f2937"; g.lineWidth = 1; g.beginPath(); g.moveTo(0, h - 0.5); g.lineTo(w, h - 0.5); g.stroke();
+    g.strokeStyle = "#3987e5"; g.lineWidth = 2; g.lineJoin = g.lineCap = "round"; g.beginPath();
+    J.action.forEach((r, i) => i ? g.lineTo(x(i), y(r[k])) : g.moveTo(x(i), y(r[k]))); g.stroke();
+    const mark = (i, colour, width) => { g.strokeStyle = colour; g.lineWidth = width; g.beginPath(); g.moveTo(x(i), 0); g.lineTo(x(i), h); g.stroke(); };
+    if (hoverFrame !== null) mark(hoverFrame, "#9ca3af", 1);
+    mark(Math.min(frame, n - 1), "#f97316", 2);
+    const value = J.action[Math.min(shown, n - 1)]?.[k];
+    row.lastElementChild.textContent = value === undefined ? "" : value.toFixed(1) + (J.names[k] === "gripper" ? " %" : "°");
+  });
+}
+function frameAt(e) {
+  const cv = $("joints").querySelector("canvas"); if (!cv || !J) return null;
+  const r = cv.getBoundingClientRect();
+  return Math.max(0, Math.min(J.action.length - 1, Math.round((e.clientX - r.left - 1) / Math.max(1, r.width - 2) * (J.action.length - 1))));
+}
+$("joints").addEventListener("mousemove", e => { hoverFrame = frameAt(e); drawJoints(); });
+$("joints").addEventListener("mouseleave", () => { hoverFrame = null; drawJoints(); });
+$("joints").addEventListener("click", e => { const f = frameAt(e); if (f !== null) { pauseVideo(); seekFrame(f); } });
+window.addEventListener("resize", drawJoints);
+
+$("t-copy").onclick = async () => {
+  try { await navigator.clipboard.writeText($("t-cmd").textContent); toast("Copied the training command"); }
+  catch { const r = document.createRange(); r.selectNodeContents($("t-cmd")); getSelection().removeAllRanges(); getSelection().addRange(r);
+          toast("Press ⌘C / Ctrl+C to copy", "The browser did not allow copying from this page."); }
+};
+
+// ---------------------------------------------------------------- deleting
+let deleting = [];
+function askDeleteEpisodes(list) {
+  if (!D) return;
+  deleting = [...new Set(list)].sort((a, b) => a - b);
+  const all = deleting.length >= D.total_episodes, one = deleting.length === 1;
+  $("de-title").textContent = one ? `Delete episode ${deleting[0]}?` : `Delete ${deleting.length} episodes?`;
+  $("de-text").innerHTML = all
+    ? `These are all of the episodes in <span class="mono" style="color:#fff">${esc(D.name)}</span>. A dataset cannot be left empty: delete the whole dataset instead (the trash button next to Record more).`
+    : `This permanently removes episode${one ? "" : "s"} <b style="color:#fff">${deleting.join(", ")}</b> from <span class="mono" style="color:#fff">${esc(D.name)}</span>.
+       The episodes after ${one ? "it" : "them"} move up to close the gap${one ? "" : "s"}, so their numbers change.
+       Video files shared with ${one ? "it" : "them"} are re-encoded, which can take a little while. This cannot be undone.`;
+  $("de-go").disabled = all;
+  openDialog("dlg-delep");
+}
+$("v-del").onclick = () => cur !== null && askDeleteEpisodes([cur]);
+$("de-go").onclick = async () => {
+  const d = $("dlg-delep"), name = D.name, list = deleting;
+  d.dataset.busy = "1"; $("de-go").disabled = true; $("de-go").textContent = "Deleting…";
+  d.querySelector("[data-close]").disabled = true;
+  try {
+    const r = await post(`/api/lab/datasets/${enc(name)}/delete-episodes`, {episodes:list});
+    toast(list.length === 1 ? `Deleted episode ${list[0]}` : `Deleted ${list.length} episodes`, `${name} now has ${r.remaining} episode${r.remaining === 1 ? "" : "s"}; the rest were renumbered.`);
+    marked = new Set();
+    wanted = {name, episode:Math.min(list[0], r.remaining - 1)};
+    delete d.dataset.busy; closeDialog("dlg-delep");
+    await loadDatasets();
+  } catch (e) { toast("Episodes not deleted", e.message, true); }
+  finally { delete d.dataset.busy; $("de-go").disabled = false; $("de-go").textContent = "Delete"; d.querySelector("[data-close]").disabled = false; closeDialog("dlg-delep"); }
+};
+
+$("b-deldata").onclick = () => {
+  if (!D) return;
+  $("dd-name").textContent = D.name;
+  $("dd-text").innerHTML = `This permanently removes <span class="mono" style="color:#fff">${esc(D.path)}</span> (${D.total_episodes} episode${D.total_episodes === 1 ? "" : "s"}, ${D.size_mb} MB) from this computer. Recordings are not in git: this cannot be undone.`;
+  $("dd-confirm").value = ""; $("dd-go").disabled = true;
+  openDialog("dlg-deldata");
+};
+$("dd-confirm").oninput = () => { $("dd-go").disabled = $("dd-confirm").value !== D.name; };
+$("dd-go").onclick = async () => {
+  const d = $("dlg-deldata"), name = D.name;
+  d.dataset.busy = "1"; $("dd-go").disabled = true; $("dd-go").textContent = "Deleting…";
+  try {
+    await post(`/api/lab/datasets/${enc(name)}/delete`, {confirm:$("dd-confirm").value});
+    toast(`Deleted ${name}`);
+    D = null; cur = null; pauseVideo(); vid.removeAttribute("src"); delete vid.dataset.url;
+    delete d.dataset.busy; closeDialog("dlg-deldata");
+    await loadDatasets();
+  } catch (e) { toast("Dataset not deleted", e.message, true); }
+  finally { delete d.dataset.busy; $("dd-go").textContent = "Delete"; closeDialog("dlg-deldata"); }
+};
+
+// ---------------------------------------------------------------- shared helpers for the data tabs
+let confirmAction = null;
+function confirmBox(title, html, goLabel, action) {
+  $("cf-title").textContent = title; $("cf-text").innerHTML = html; $("cf-go").textContent = goLabel;
+  confirmAction = action; openDialog("dlg-confirm");
+}
+$("cf-go").onclick = async () => {
+  const d = $("dlg-confirm"), label = $("cf-go").textContent;
+  d.dataset.busy = "1"; $("cf-go").disabled = true; $("cf-go").textContent = "Working…";
+  try { await confirmAction(); }
+  catch (e) { toast("Not done", e.message, true); }
+  finally { delete d.dataset.busy; $("cf-go").disabled = false; $("cf-go").textContent = label; closeDialog("dlg-confirm"); }
+};
+function progressRow(name, have, target, text) {
+  const pct = Math.min(100, 100 * have / target);
+  return `<div class="prog"><span>${esc(name)}</span><div class="track"><i class="${have >= target ? "full" : ""}" style="width:${pct}%"></i></div><span>${esc(text)}</span></div>`;
+}
+function modelLine(id, status) {  // called on every status poll: only rebuilt when it changes, so clicks are not lost
+  const ok = status === "ready", text = status || "unknown", canReload = !!S && S.state === "SAFE_STOP";
+  const key = `${text}|${canReload}`;
+  if ($(id).dataset.key === key) return;
+  $(id).dataset.key = key;
+  $(id).innerHTML = `<span>Model:</span><span class="${ok ? "ok" : /^missing/.test(text) ? "warnt" : "badt"}">${esc(text)}</span>
+    <button class="btn sm" data-reload ${canReload ? "" : "disabled"} title="Load model files again after training (Safe Stop only)">Reload models</button>`;
+  $(id).querySelector("[data-reload]").onclick = () => tryPost("/api/models/reload", {}, "Models not reloaded").then(() => toast("Models reloaded")).catch(() => {});
+}
+const when = t => new Date(t * 1000).toLocaleString([], {month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"});
+
+// ---------------------------------------------------------------- wrist images
+const SET_NAMES = {"grasp_verify/held":"Grasp check — held", "grasp_verify/empty":"Grasp check — empty",
+  "handoff_grab/grabbed":"Hand-off — grabbed", "handoff_grab/not_grabbed":"Hand-off — not grabbed",
+  "yogurt_detection/images":"Yogurt detector"};
+const LABEL_NAMES = {held:"held", empty:"empty", grabbed:"grabbed", not_grabbed:"not grabbed", images:"pictures"};
+const MODEL_OF = {grasp_verify:"grasp_verify", handoff_grab:"handoff_grab", yogurt_detection:"yogurt_detector"};
+const REQUEST = ["Start a request", "command", "give me the yogurt", ["IDLE"]];
+const HELPERS = {
+  yogurt_detection: {hint:"In Safe Stop, move to the survey pose (the view Check has), put the cup down, start saving and turn the arm so the cup crosses the picture.",
+    buttons:[["Survey pose", "pose", "survey", ["SAFE_STOP"]], ["Pan −5°", "jog", -5, ["SAFE_STOP"]], ["Pan +5°", "jog", 5, ["SAFE_STOP"]]]},
+  grasp_verify: {hint:"Run a request through to Verify: the arm lifts the cup to the camera and waits there. Save a burst while it waits; Not held sends it round again for the next one.",
+    buttons:[["Idle", "state", "IDLE", null], REQUEST, ["Yogurt centred", "signal", "found", ["CHECK"]], ["Grasp done", "signal", "grasped", ["GRASP"]],
+             ["Not held — go round again", "held", false, ["VERIFY"]]]},
+  handoff_grab: {hint:"Run a request through to Handoff (arm stretched out holding the cup), then SAFE STOP so it stays put. Each picture pairs the wrist camera with the base camera's view of the gripper: check the right half shows the gripper (handoff.base_crop in robot.yaml). Rest the arm with Return about once a minute: the shoulder works hard in that pose.",
+    buttons:[["Idle", "state", "IDLE", null], REQUEST, ["Yogurt centred", "signal", "found", ["CHECK"]], ["Grasp done", "signal", "grasped", ["GRASP"]],
+             ["Held — go to Handoff", "held", true, ["VERIFY"]], ["Return (rest the arm)", "state", "RETURN", null]]},
+};
+let IM = null, iset = null, BL = [], burst = null, IMGS = [], picked = new Set(), lastPick = null, capWas = false, capBurst = null, burstToken = 0;
+let wantedSet = START.tab === "images" && START.rest.length >= 2 ? `${START.rest[0]}/${START.rest[1]}` : null;
+let wantedBurst = START.tab === "images" ? START.rest[2] ?? null : null;
+const dsOf = k => k.split("/")[0], lbOf = k => k.split("/")[1];
+const isDetector = () => iset && dsOf(iset) === "yogurt_detection";
+const imgUrl = (b, im, thumb) => `${location.origin}/api/lab/images/${iset}/${enc(b)}/${enc(im.name)}?v=${im.v}${thumb ? "&thumb=1" : ""}`;
+function burstName(name) {
+  const m = /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(-\d+)?$/.exec(name || "");
+  if (!m) return name;
+  const d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+  return d.toLocaleString([], {month:"short", day:"numeric", hour:"2-digit", minute:"2-digit", second:"2-digit"}) + (m[7] ? ` (${m[7].slice(1)})` : "");
+}
+function imageFeed(on) {  // hand-off pictures pair the wrist camera with the base camera's view of the gripper
+  const img = $("i-feed"), handoff = !!iset && dsOf(iset) === "handoff_grab";
+  const src = location.origin + (handoff ? "/video/handoff" : "/video/wrist");
+  if (on && img.getAttribute("src") !== src) img.src = src;
+  if (!on && img.getAttribute("src")) img.removeAttribute("src");
+  $("i-feed-tag").textContent = handoff ? "live: wrist camera | base camera around the gripper — saved exactly like this"
+    : "live wrist camera — the saved pictures have no overlays";
+}
+
+async function loadImages() {
+  try { IM = await get("/api/lab/images"); } catch (e) { toast("Could not read the wrist images", e.message, true); return; }
+  if (wantedSet in IM.sets) iset = wantedSet;
+  wantedSet = null;
+  if (!iset) { const stored = localStorage.getItem("yogurt.lab.iset"); iset = stored in IM.sets ? stored : "grasp_verify/held"; }
+  renderImageSets();
+  await loadBursts();
+}
+async function refreshImageCounts() {
+  try { IM = await get("/api/lab/images"); renderImageSets(); } catch {}
+}
+function renderImageSets() {
+  const sel = $("i-set");
+  sel.innerHTML = Object.entries(IM.sets).map(([k, v]) => `<option value="${k}">${esc(SET_NAMES[k] || k)} — ${v.images} picture${v.images === 1 ? "" : "s"}</option>`).join("");
+  sel.value = iset;
+  const ds = dsOf(iset), help = HELPERS[ds];
+  $("i-progress").innerHTML = IM.image_sets[ds].map(lb => { const v = IM.sets[`${ds}/${lb}`];
+    return progressRow(SET_NAMES[`${ds}/${lb}`], v.images, v.target, `${v.images} / ${v.target} · ${v.bursts} burst${v.bursts === 1 ? "" : "s"}`); }).join("")
+    + (ds === "yogurt_detection" ? (() => { const v = IM.sets[iset];
+        return progressRow("With a label", v.labelled, Math.max(1, v.images), `${v.labelled} / ${v.images} · ${v.no_yogurt} without cup`); })() : "");
+  if (ds === "yogurt_detection") {
+    const v = IM.sets[iset], left = v.images - v.labelled;
+    $("i-labelling").innerHTML = left
+      ? `<button class="btn" id="i-label-go">Draw boxes: ${left} picture${left === 1 ? "" : "s"} still need one</button>`
+      : `<span class="ok" style="font-size:13px">${v.images ? "Every picture has a label." : ""}</span>`;
+    if (left) $("i-label-go").onclick = () => startLabelling();
+  } else $("i-labelling").innerHTML = "";
+  $("i-cmd").textContent = IM.train[ds];
+  $("i-train-hint").textContent = ds === "yogurt_detection"
+    ? "Uses only labelled pictures; whole bursts are held out to test it. About an hour on a laptop CPU. See data/yogurt_detection/README.md."
+    : `A few minutes on a laptop; whole bursts are held out to test it. See data/${ds}/README.md.`;
+  $("i-helper-hint").textContent = help.hint;
+  $("i-helpers").innerHTML = help.buttons.map((b, i) => `<button class="btn sm" data-h="${i}">${esc(b[0])}</button>`).join("");
+  $("i-helpers").querySelectorAll("[data-h]").forEach(btn => btn.onclick = () => helper(help.buttons[+btn.dataset.h]));
+  $("i-shots").innerHTML = (IM.shots[iset] || []).map(t => `<li>${esc(t)}</li>`).join("");
+  imageFeed(view === "images");
+  renderImagesLive();
+}
+$("i-set").onchange = () => { iset = $("i-set").value; localStorage.setItem("yogurt.lab.iset", iset); burst = null; renderImageSets(); loadBursts(); };
+
+function helper([label, kind, value]) {
+  const fail = `${label}: not done`;
+  if (kind === "state") return tryPost("/api/state", {state:value}, fail).catch(() => {});
+  if (kind === "command") return tryPost("/api/signal", {name:"command", value}, fail).catch(() => {});
+  if (kind === "signal") return tryPost("/api/signal", {name:value, value:true}, fail).catch(() => {});
+  if (kind === "held") return tryPost("/api/signal", {name:"held", value}, fail).catch(() => {});
+  if (kind === "pose") return tryPost("/api/pose/goto", {name:value}, fail).catch(() => {});
+  if (kind === "jog") return tryPost("/api/arm/jog", {joint:"shoulder_pan", delta:value}, fail).catch(() => {});
+}
+
+function renderImagesLive() {
+  if (!IM || !S) return;
+  const cap = S.capture, btn = $("i-capture"), cameraOk = S.hardware["wrist camera"] === "ok";
+  btn.classList.toggle("stop", cap.running);
+  btn.querySelector("span").textContent = cap.running ? "Stop saving" : "Start saving";
+  btn.querySelector("use").setAttribute("href", cap.running ? "#i-stop" : "#i-disc");
+  btn.disabled = !cap.running && !cameraOk;
+  $("i-rate").disabled = cap.running;
+  $("i-capstat").innerHTML = cap.running
+    ? `<span class="badt">●</span> Saving into <b>${esc(SET_NAMES[`${cap.dataset}/${cap.label}`])}</b>: ${cap.saved} picture${cap.saved === 1 ? "" : "s"} so far.`
+    : cameraOk ? `Pictures go into <b>${esc(SET_NAMES[iset])}</b>, in a new burst each time you start.`
+    : `<span class="badt">Wrist camera: ${esc(S.hardware["wrist camera"])}</span>`;
+  if (cap.running) capBurst = {set:`${cap.dataset}/${cap.label}`, burst:cap.burst};
+  if (capWas && !cap.running && capBurst) {  // a burst just finished: show it
+    if (capBurst.set === iset) wantedBurst = capBurst.burst;
+    loadImages();
+  }
+  capWas = cap.running;
+  const help = HELPERS[dsOf(iset)];
+  $("i-helpers").querySelectorAll("[data-h]").forEach(b => { const states = help.buttons[+b.dataset.h][3];
+    b.disabled = !S.arm.connected || (states !== null && !states.includes(S.state)); });
+  modelLine("i-model", S.models[MODEL_OF[dsOf(iset)]]);
+}
+$("i-capture").onclick = () => {
+  if (S.capture.running) return tryPost("/api/lab/images/capture", {stop:true}, "Could not stop").catch(() => {});
+  const rate = Number($("i-rate").value);
+  if (!(rate >= 0.2 && rate <= 10)) return toast("Pictures per second must be between 0.2 and 10", "", true);
+  tryPost("/api/lab/images/capture", {dataset:dsOf(iset), label:lbOf(iset), per_second:rate}, "Could not start saving").catch(() => {});
+};
+
+async function loadBursts() {
+  const token = ++burstToken, set = iset;
+  let r;
+  try { r = await get(`/api/lab/images/${set}`); } catch (e) { toast("Could not list the bursts", e.message, true); return; }
+  if (token !== burstToken || set !== iset) return;
+  BL = r.bursts;
+  const want = wantedBurst && BL.some(b => b.name === wantedBurst) ? wantedBurst
+    : BL.some(b => b.name === burst) ? burst : BL[0]?.name ?? null;
+  wantedBurst = null;
+  await openBurst(want);
+}
+function renderBurstList() {
+  const total = BL.reduce((n, b) => n + b.images, 0);
+  $("ib-count").textContent = `${BL.length} · ${total} pictures`;
+  $("ib-list").innerHTML = BL.length ? BL.map(b => `<div class="burst${b.name === burst ? " on" : ""}" data-b="${esc(b.name)}">
+      ${b.cover ? `<img loading="lazy" src="${location.origin}/api/lab/images/${iset}/${enc(b.name)}/${enc(b.cover)}?thumb=1&v=${b.images}" alt="">` : '<span class="noimg"></span>'}
+      <div><div class="bn">${esc(burstName(b.name))}</div><div class="bm">${b.images} picture${b.images === 1 ? "" : "s"}${b.labelled !== undefined ? ` · ${b.labelled} labelled` : ""}</div></div></div>`).join("")
+    : `<div class="hint" style="padding:12px">No bursts yet: press Start saving.</div>`;
+  const on = $("ib-list").querySelector(".burst.on"); if (on) on.scrollIntoView({block:"nearest"});
+}
+$("ib-list").addEventListener("click", e => { const row = e.target.closest(".burst"); if (row && row.dataset.b !== burst) openBurst(row.dataset.b); });
+
+async function openBurst(name) {
+  const token = ++burstToken, set = iset;
+  burst = name; picked = new Set(); lastPick = null;
+  if (view === "images") writeHash("images", dsOf(iset), lbOf(iset), burst);
+  renderBurstList();
+  if (!name) { IMGS = []; renderGrid(); return; }
+  let r;
+  try { r = await get(`/api/lab/images/${set}/${enc(name)}`); } catch (e) { toast("Could not open the burst", e.message, true); return; }
+  if (token !== burstToken || set !== iset || name !== burst) return;
+  IMGS = r.images;
+  renderGrid();
+}
+function renderGrid() {
+  const head = $("ib-head"), ds = dsOf(iset), others = IM ? IM.image_sets[ds].filter(l => l !== lbOf(iset)) : [];
+  if (!burst) { head.innerHTML = `<span class="dim">No burst selected</span>`; $("ib-grid").innerHTML = ""; return; }
+  const capturingHere = S && S.capture.running && S.capture.burst === burst && `${S.capture.dataset}/${S.capture.label}` === iset;
+  head.innerHTML = `<b>${esc(burstName(burst))}</b><span class="dim tnum">${IMGS.length} picture${IMGS.length === 1 ? "" : "s"}</span>
+    <div class="grow"></div>
+    ${picked.size ? `<span style="font-size:12px">${picked.size} selected</span><button class="btn sm ghost" id="ib-none">Clear</button>
+       <button class="btn sm danger" id="ib-delsel"><svg class="i s"><use href="#i-trash"/></svg>Delete selected</button>`
+     : `<button class="btn sm ghost" id="ib-all">Select all</button>`}
+    ${others.map(l => `<button class="btn sm" data-move="${l}" ${capturingHere ? "disabled" : ""} title="Every picture in this burst was taken with the wrong label selected">Move burst to “${esc(LABEL_NAMES[l])}”</button>`).join("")}
+    <button class="btn sm danger" id="ib-delburst" ${capturingHere ? "disabled title='Still saving into this burst'" : ""}><svg class="i s"><use href="#i-trash"/></svg>Delete burst</button>`;
+  if ($("ib-all")) $("ib-all").onclick = () => { IMGS.forEach(i => picked.add(i.name)); renderGrid(); };
+  if ($("ib-none")) $("ib-none").onclick = () => { picked.clear(); renderGrid(); };
+  if ($("ib-delsel")) $("ib-delsel").onclick = () => askDeleteImages([...picked]);
+  $("ib-delburst").onclick = () => askDeleteBurst();
+  head.querySelectorAll("[data-move]").forEach(b => b.onclick = () => moveBurst(b.dataset.move));
+  $("ib-grid").innerHTML = IMGS.map((im, i) => {
+    let mark = "";
+    if (ds === "yogurt_detection") {
+      if (Array.isArray(im.box)) { const [x1, y1, x2, y2] = im.box;
+        mark = `<span class="bx" style="left:${x1 * 100}%;top:${y1 * 100}%;width:${(x2 - x1) * 100}%;height:${(y2 - y1) * 100}%"></span>`; }
+      else mark = im.box === "none" ? `<span class="bd">no yogurt</span>` : `<span class="bd un">no label yet</span>`;
+    }
+    return `<div class="tile${picked.has(im.name) ? " on" : ""}" data-i="${i}"><img loading="lazy" src="${imgUrl(burst, im, true)}" alt="">
+      ${mark}<input type="checkbox" ${picked.has(im.name) ? "checked" : ""} aria-label="Select ${esc(im.name)}"><span class="n">${esc(im.name.replace(/\.jpg$/, ""))}</span></div>`;
+  }).join("") || `<div class="hint" style="padding:8px">${capturingHere ? "Saving pictures…" : "This burst is empty."}</div>`;
+}
+$("ib-grid").addEventListener("click", e => {
+  const tile = e.target.closest(".tile"); if (!tile) return;
+  const i = Number(tile.dataset.i), name = IMGS[i].name;
+  if (e.target.matches("input")) {
+    if (e.shiftKey && lastPick !== null) {  // shift-click selects the whole range
+      const [a, b] = [Math.min(lastPick, i), Math.max(lastPick, i)], on = e.target.checked;
+      for (let k = a; k <= b; k++) on ? picked.add(IMGS[k].name) : picked.delete(IMGS[k].name);
+    } else e.target.checked ? picked.add(name) : picked.delete(name);
+    lastPick = i; renderGrid(); return;
+  }
+  openViewer(i);
+});
+
+function askDeleteImages(names) {
+  if (!names.length) return;
+  const all = names.length === IMGS.length, one = names.length === 1;
+  confirmBox(one ? "Delete this picture?" : `Delete ${names.length} pictures?`,
+    `This permanently removes ${one ? `<span class="mono" style="color:#fff">${esc(names[0])}</span>` : `${names.length} pictures`} from the burst
+     ${esc(burstName(burst))} (${esc(SET_NAMES[iset])})${isDetector() ? ", with their boxes" : ""}.${all ? " That is every picture in it, so the burst goes too." : ""} This cannot be undone.`,
+    "Delete", async () => {
+      const r = await post("/api/lab/images/delete", {dataset:dsOf(iset), label:lbOf(iset), burst, names});
+      toast(one ? "Picture deleted" : `${r.deleted} pictures deleted`, r.left ? `${r.left} left in this burst.` : "The burst is gone.");
+      await afterImageChange(r.left);
+    });
+}
+function askDeleteBurst() {
+  confirmBox("Delete this burst?",
+    `This permanently removes the burst ${esc(burstName(burst))}: all ${IMGS.length} of its pictures${isDetector() ? " and their boxes" : ""} (${esc(SET_NAMES[iset])}). This cannot be undone.`,
+    "Delete burst", async () => {
+      const r = await post("/api/lab/images/delete", {dataset:dsOf(iset), label:lbOf(iset), burst});
+      toast("Burst deleted", `${r.deleted} pictures removed.`);
+      await afterImageChange(0);
+    });
+}
+async function moveBurst(to) {
+  try {
+    const r = await post("/api/lab/images/move", {dataset:dsOf(iset), label:lbOf(iset), burst, to});
+    toast(`Burst moved to “${LABEL_NAMES[to]}”`, `${IMGS.length} pictures now count as ${SET_NAMES[`${dsOf(iset)}/${to}`]}.`);
+    burst = null; await refreshImageCounts(); await loadBursts();
+  } catch (e) { toast("Burst not moved", e.message, true); }
+}
+async function afterImageChange(left) {
+  picked.clear();
+  if (!left) { if (!$("dlg-image").hidden) { delete $("dlg-image").dataset.busy; closeDialog("dlg-image"); } burst = null; }
+  await refreshImageCounts(); await loadBursts();
+  if (!$("dlg-image").hidden) { ivIndex = Math.min(ivIndex, IMGS.length - 1); showViewerImage(); }
+}
+
+// picture viewer, and the box editor for the detector
+let ivIndex = 0, ivBox = null, ivKind = null, ivDrag = null, ivToken = 0;
+function openViewer(i) { ivIndex = i; if ($("dlg-image").hidden) openDialog("dlg-image"); showViewerImage(); }
+async function showViewerImage() {
+  const im = IMGS[ivIndex];
+  if (!im) { closeDialog("dlg-image"); return; }
+  const token = ++ivToken, det = isDetector();
+  $("iv-title").textContent = `${SET_NAMES[iset]} · ${burstName(burst)} · ${im.name}`;
+  $("iv-pos").textContent = `${ivIndex + 1} of ${IMGS.length}`;
+  $("iv-prev").disabled = ivIndex === 0; $("iv-next").disabled = ivIndex === IMGS.length - 1;
+  $("iv-img").src = imgUrl(burst, im, false);
+  $("iv-tools").hidden = !det;
+  $("iv-stage").classList.toggle("draw", det);
+  ivBox = Array.isArray(im.box) ? im.box : null;
+  ivKind = Array.isArray(im.box) ? "saved" : im.box === "none" ? "none" : null;
+  drawIvBox();
+  if (det && im.box == null && IM.detector) {  // let the loaded detector suggest a box
+    try { const r = await get(`/api/lab/images/propose/${enc(burst)}/${enc(im.name)}`);
+      if (token === ivToken && ivKind === null && r.box) { ivBox = r.box; ivKind = "suggested"; drawIvBox(); } } catch {}
+  }
+}
+function drawIvBox() {
+  const b = $("iv-box");
+  b.hidden = !ivBox;
+  if (ivBox) { const [x1, y1, x2, y2] = ivBox;
+    Object.assign(b.style, {left:x1 * 100 + "%", top:y1 * 100 + "%", width:(x2 - x1) * 100 + "%", height:(y2 - y1) * 100 + "%"}); }
+  b.classList.toggle("sug", ivKind === "suggested");
+  $("iv-status").textContent = {saved:"Box saved. Drag to redraw it.", none:"Labelled: no yogurt in this picture.",
+    suggested:"The detector's guess is dashed: Save box if it fits, or drag a better one.", drawn:"Press Save box (Enter).",
+    null:"No label yet: drag a box around the cup, or press No yogurt (N)."}[ivKind];
+  $("iv-save").disabled = !ivBox || ivKind === "saved";
+}
+const ivFrac = e => { const r = $("iv-img").getBoundingClientRect();
+  return [Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))]; };
+$("iv-wrap").addEventListener("mousedown", e => { if (isDetector() && IMGS[ivIndex]) { ivDrag = ivFrac(e); e.preventDefault(); } });
+window.addEventListener("mousemove", e => { if (!ivDrag) return; const [x, y] = ivFrac(e);
+  ivBox = [Math.min(ivDrag[0], x), Math.min(ivDrag[1], y), Math.max(ivDrag[0], x), Math.max(ivDrag[1], y)]; ivKind = "drawn"; drawIvBox(); });
+window.addEventListener("mouseup", () => { if (ivDrag && ivBox && (ivBox[2] - ivBox[0] < 0.01 || ivBox[3] - ivBox[1] < 0.01)) {
+  const im = IMGS[ivIndex]; ivBox = Array.isArray(im?.box) ? im.box : null; ivKind = Array.isArray(im?.box) ? "saved" : im?.box === "none" ? "none" : null; drawIvBox(); }
+  ivDrag = null; });
+async function saveLabel(box) {
+  const im = IMGS[ivIndex]; if (!im) return;
+  try { await post("/api/lab/images/box", {burst, name:im.name, box}); }
+  catch (e) { toast("Label not saved", e.message, true); return; }
+  im.box = box; renderGrid(); refreshImageCounts();
+  if (box === null) { ivBox = null; ivKind = null; drawIvBox(); return; }
+  if ($("iv-auto").checked) return nextUnlabelled();
+  if (ivIndex < IMGS.length - 1) { ivIndex++; showViewerImage(); } else { ivKind = box === "none" ? "none" : "saved"; drawIvBox(); }
+}
+$("iv-save").onclick = () => ivBox && saveLabel(ivBox.map(v => Math.round(v * 1e4) / 1e4));
+$("iv-none").onclick = () => saveLabel("none");
+$("iv-clear").onclick = () => saveLabel(null);
+$("iv-prev").onclick = () => { if (ivIndex > 0) { ivIndex--; showViewerImage(); } };
+$("iv-next").onclick = () => { if (ivIndex < IMGS.length - 1) { ivIndex++; showViewerImage(); } };
+$("iv-del").onclick = () => IMGS[ivIndex] && askDeleteImages([IMGS[ivIndex].name]);
+function viewerKeys(e) {
+  if (e.key === "ArrowLeft") { e.preventDefault(); $("iv-prev").click(); }
+  else if (e.key === "ArrowRight") { e.preventDefault(); $("iv-next").click(); }
+  else if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); $("iv-del").click(); }
+  else if (isDetector() && e.key === "Enter") { e.preventDefault(); $("iv-save").click(); }
+  else if (isDetector() && (e.key === "n" || e.key === "N")) { e.preventDefault(); $("iv-none").click(); }
+}
+async function startLabelling() {
+  $("iv-auto").checked = true;
+  await nextUnlabelled();
+}
+async function nextUnlabelled() {
+  let r;
+  try { r = await get("/api/lab/images/next-unlabelled"); } catch (e) { toast("Could not find the next picture", e.message, true); return; }
+  if (!r.burst) { toast("Every detector picture has a label"); closeDialog("dlg-image"); return; }
+  if (iset !== "yogurt_detection/images") { iset = "yogurt_detection/images"; renderImageSets(); }
+  if (burst !== r.burst) { wantedBurst = r.burst; await loadBursts(); }
+  const i = IMGS.findIndex(im => im.name === r.name);
+  if (i >= 0) openViewer(i);
+}
+
+// ---------------------------------------------------------------- wake word
+const WAKE_HINT = {
+  positive:"Say only the wake phrase, once, the way it is shown. Fumbled it? Delete the clip (or move it to negative) and say it again.",
+  negative:"Say the phrase shown. Phrases that sound like the wake phrase matter most.",
+  background:"Say nothing: let the room be itself — people talking nearby, the arm moving. 30–60 s per clip.",
+};
+const LENGTH = {positive:2, negative:2, background:30};
+let W = null, wlabel = "positive", wfilter = START.tab === "wake" && ["positive", "negative", "background"].includes(START.rest[0]) ? START.rest[0] : "all", wsearch = "",
+    wpicked = new Set(), promptAt = {positive:0, negative:0}, lastClip = null, playingKey = null, recordingClip = false;
+const player = new Audio();
+player.onended = player.onpause = () => { playingKey = null; renderPlayIcons(); };
+const clipKey = c => `${c.label}/${c.name}`;
+const clipUrl = c => `${location.origin}/api/lab/wake/${c.label}/${enc(c.name)}`;
+
+async function loadWake() {
+  try { W = await get("/api/lab/wake"); } catch (e) { toast("Could not read the wake-word clips", e.message, true); return; }
+  const keys = new Set(W.clips.map(clipKey));
+  wpicked = new Set([...wpicked].filter(k => keys.has(k)));
+  if (lastClip && !keys.has(clipKey(lastClip))) lastClip = null;
+  renderWake();
+}
+function currentPhrase() {
+  if (wlabel === "background") return "";
+  const list = W.prompts[wlabel] || [];
+  return list.length ? list[((promptAt[wlabel] % list.length) + list.length) % list.length] : "";
+}
+function renderWake() {
+  if (!W) return;
+  $("w-labels").innerHTML = ["positive", "negative", "background"].map(l =>
+    `<button class="${l === wlabel ? "on" : ""}" data-l="${l}">${l}<span class="c">${W.totals[l].clips}</span></button>`).join("");
+  $("w-labels").querySelectorAll("button").forEach(b => b.onclick = () => { wlabel = b.dataset.l; $("w-seconds").value = LENGTH[wlabel]; renderWake(); });
+  if (!$("w-seconds").value) $("w-seconds").value = LENGTH[wlabel];
+  $("w-hint").textContent = WAKE_HINT[wlabel];
+  const phrase = currentPhrase();
+  $("w-phrase").textContent = wlabel === "background" ? "(stay quiet — record the room)" : phrase;
+  $("w-phrase").classList.toggle("room", wlabel === "background");
+  $("w-prev").disabled = $("w-next").disabled = wlabel === "background";
+  const t = W.totals, g = W.targets;
+  $("w-progress").innerHTML = progressRow("Positive", t.positive.clips, g.positive, `${t.positive.clips} / ${g.positive} clips`)
+    + progressRow("Negative", t.negative.clips, g.negative, `${t.negative.clips} / ${g.negative} clips`)
+    + progressRow("Background", t.background.seconds, g.background, `${(t.background.seconds / 60).toFixed(1)} / ${g.background / 60} min`)
+    + `<div class="hint">Record from where people will stand (0.5–3 m from the base camera, in front and to both sides), and get several people to record: more voices beat more clips from one voice.</div>`;
+  $("w-cmd").textContent = W.train;
+  renderLastClip(); renderClips(); renderWakeLive();
+}
+$("w-prev").onclick = () => { promptAt[wlabel]--; renderWake(); };
+$("w-next").onclick = () => { promptAt[wlabel]++; renderWake(); };
+
+function renderWakeLive() {
+  if (!W || !S) return;
+  const mic = S.hardware.microphone || "", ok = /^ok/.test(mic);
+  $("w-mic").innerHTML = `<svg class="i s" style="vertical-align:-2px"><use href="#i-mic"/></svg> ${ok ? esc(mic) : `<span class="badt">${esc(mic)}</span>`}`;
+  $("w-record").disabled = recordingClip || !ok;
+  modelLine("w-model", S.models.wake_word);
+}
+$("w-record").onclick = async () => {
+  const seconds = Number($("w-seconds").value);
+  if (!(seconds >= 0.5 && seconds <= 120)) return toast("A clip is 0.5 to 120 seconds long", "", true);
+  stopClip();
+  recordingClip = true; renderWakeLive();
+  const label = wlabel, phrase = currentPhrase(), t0 = performance.now();
+  $("w-record").querySelector("span").textContent = "Recording…";
+  const tick = setInterval(() => { const done = (performance.now() - t0) / 1000;
+    $("w-meter").style.width = Math.min(100, 100 * done / seconds) + "%";
+    $("w-status").textContent = `${Math.max(0, seconds - done).toFixed(1)} s left`; }, 50);
+  try {
+    lastClip = await post("/api/lab/wake/record", {label, seconds, phrase});
+    if (label !== "background") promptAt[label]++;
+    await loadWake();
+  } catch (e) { toast("Clip not recorded", e.message, true); }
+  finally {
+    clearInterval(tick); recordingClip = false; $("w-meter").style.width = "0%"; $("w-status").textContent = "";
+    $("w-record").querySelector("span").textContent = "Record"; renderWakeLive();
+  }
+};
+function renderLastClip() {
+  const c = lastClip;
+  if (!c) { $("w-last").innerHTML = ""; return; }
+  const quiet = c.peak !== null && c.peak < 0.02;
+  $("w-last").innerHTML = `<div class="lastclip"><span class="badge ${c.label}">${c.label}</span>
+    <span>Saved ${c.phrase ? `“${esc(c.phrase)}”` : esc(c.name)} · ${c.seconds ?? "?"} s · peak <span class="${quiet ? "warnt" : ""}">${c.peak ?? "?"}${quiet ? " — very quiet, the microphone barely heard it" : ""}</span></span>
+    <div class="grow"></div>
+    <button class="btn sm" data-play="${esc(clipKey(c))}">${playingKey === clipKey(c) ? "■ Stop" : "▶ Play"}</button>
+    <button class="btn sm danger" id="w-last-del">Delete</button></div>`;
+  $("w-last").querySelector("[data-play]").onclick = () => playClip(c);
+  $("w-last-del").onclick = () => askDeleteClips([c]);
+}
+
+function shownClips() {
+  const q = wsearch.trim().toLowerCase();
+  return W.clips.filter(c => (wfilter === "all" || c.label === wfilter) && (!q || c.phrase.toLowerCase().includes(q) || c.name.toLowerCase().includes(q)));
+}
+function renderClips() {
+  const shown = shownClips(), sel = W.clips.filter(c => wpicked.has(clipKey(c)));
+  const filters = ["all", "positive", "negative", "background"].map(f =>
+    `<button class="${f === wfilter ? "on" : ""}" data-f="${f}">${f}<span class="c">${f === "all" ? W.clips.length : W.totals[f].clips}</span></button>`).join("");
+  $("w-head").innerHTML = `<div class="seg" id="w-filter">${filters}</div>
+    <input class="search" id="w-search" placeholder="Search phrases" value="${esc(wsearch)}">
+    <div class="grow"></div>
+    ${sel.length ? `<span style="font-size:12px">${sel.length} selected</span><button class="btn sm ghost" id="w-none">Clear</button>
+      <select class="picker" id="w-to" style="min-width:0;height:28px;font-size:12px">${["positive", "negative", "background"].map(l => `<option value="${l}">${l}</option>`).join("")}</select>
+      <button class="btn sm" id="w-move">Move to label</button>
+      <button class="btn sm danger" id="w-del"><svg class="i s"><use href="#i-trash"/></svg>Delete</button>`
+    : `<button class="btn sm ghost" id="w-all" ${shown.length ? "" : "disabled"}>Select all shown</button>`}`;
+  $("w-filter").querySelectorAll("button").forEach(b => b.onclick = () => { wfilter = b.dataset.f; if (view === "wake") writeHash("wake", wfilter === "all" ? null : wfilter); renderClips(); });
+  $("w-search").oninput = () => { wsearch = $("w-search").value; renderClipRows(); };
+  if ($("w-all")) $("w-all").onclick = () => { shown.forEach(c => wpicked.add(clipKey(c))); renderClips(); };
+  if ($("w-none")) $("w-none").onclick = () => { wpicked.clear(); renderClips(); };
+  if ($("w-del")) $("w-del").onclick = () => askDeleteClips(sel);
+  if ($("w-move")) $("w-move").onclick = () => moveClips(sel, $("w-to").value);
+  renderClipRows();
+}
+function renderClipRows() {
+  const shown = shownClips();
+  $("w-rows").innerHTML = shown.map(c => { const k = clipKey(c), quiet = c.peak !== null && c.peak < 0.02;
+    return `<tr class="${wpicked.has(k) ? "on" : ""}" data-k="${esc(k)}">
+      <td style="width:28px"><input type="checkbox" ${wpicked.has(k) ? "checked" : ""} aria-label="Select clip"></td>
+      <td style="width:40px"><button class="btn sm icon" data-play="${esc(k)}" aria-label="Play">${playingKey === k ? "■" : "▶"}</button></td>
+      <td>${c.phrase ? esc(c.phrase) : `<span class="dim">${c.label === "background" ? "room" : esc(c.name)}</span>`}</td>
+      <td><span class="badge ${c.label}">${c.label}</span></td>
+      <td class="tnum dim">${c.seconds === null ? '<span class="badt">unreadable</span>' : c.seconds.toFixed(1) + " s"}</td>
+      <td class="tnum ${quiet ? "warnt" : "dim"}" title="Loudest sample (0–1)">${c.peak === null ? "" : "peak " + c.peak.toFixed(2) + (quiet ? " · quiet" : "")}</td>
+      <td class="dim" style="white-space:nowrap">${when(c.time)}</td></tr>`; }).join("")
+    || `<tr><td class="hint" style="padding:16px">${W.clips.length ? "No clip matches." : "No clips yet: press Record."}</td></tr>`;
+}
+$("w-rows").addEventListener("click", e => {
+  const row = e.target.closest("tr[data-k]"); if (!row) return;
+  const c = W.clips.find(x => clipKey(x) === row.dataset.k); if (!c) return;
+  if (e.target.matches("input")) { e.target.checked ? wpicked.add(row.dataset.k) : wpicked.delete(row.dataset.k); renderClips(); }
+  else if (e.target.closest("[data-play]")) playClip(c);
+});
+function playClip(c) {
+  const k = clipKey(c);
+  if (playingKey === k) { stopClip(); return; }
+  player.src = clipUrl(c);
+  player.play().then(() => { playingKey = k; renderPlayIcons(); }).catch(e => toast("Could not play the clip", e.message, true));
+}
+function stopClip() { if (!player.paused) player.pause(); playingKey = null; renderPlayIcons(); }
+function renderPlayIcons() {
+  document.querySelectorAll("#w-rows [data-play]").forEach(b => b.textContent = b.dataset.play === playingKey ? "■" : "▶");
+  const last = document.querySelector("#w-last [data-play]");
+  if (last) last.textContent = last.dataset.play === playingKey ? "■ Stop" : "▶ Play";
+}
+function askDeleteClips(list) {
+  if (!list.length) return;
+  const one = list.length === 1;
+  confirmBox(one ? "Delete this clip?" : `Delete ${list.length} clips?`,
+    `This permanently removes ${one ? `<span class="mono" style="color:#fff">${esc(list[0].label)}/${esc(list[0].name)}</span>` : `${list.length} clips`} from data/wake_word. This cannot be undone.`,
+    "Delete", async () => {
+      stopClip();
+      const r = await post("/api/lab/wake/delete", {clips:list.map(c => ({label:c.label, name:c.name}))});
+      toast(r.deleted === 1 ? "Clip deleted" : `${r.deleted} clips deleted`);
+      list.forEach(c => wpicked.delete(clipKey(c)));
+      await loadWake();
+    });
+}
+async function moveClips(list, to) {
+  const moving = list.filter(c => c.label !== to);
+  if (!moving.length) return toast(`Those clips are already ${to}`);
+  try {
+    stopClip();
+    const r = await post("/api/lab/wake/move", {clips:moving.map(c => ({label:c.label, name:c.name})), to});
+    toast(`${r.moved} clip${r.moved === 1 ? "" : "s"} moved to ${to}`);
+    wpicked.clear(); await loadWake();
+  } catch (e) { toast("Clips not moved", e.message, true); }
+}
+
+// ---------------------------------------------------------------- an address typed or pasted by hand
+window.addEventListener("hashchange", () => {
+  const h = readHash();
+  tab = h.tab;
+  if (h.tab === "grasp") wanted = {name:h.rest[0] ?? null, episode:/^\d+$/.test(h.rest[1] ?? "") ? Number(h.rest[1]) : null};
+  if (h.tab === "images") { wantedSet = h.rest.length >= 2 ? `${h.rest[0]}/${h.rest[1]}` : null; wantedBurst = h.rest[2] ?? null; }
+  if (h.tab === "wake") wfilter = ["positive", "negative", "background"].includes(h.rest[0]) ? h.rest[0] : "all";
+  if (!S) return;
+  if (view === h.tab) {  // same tab: reload it in place
+    if (h.tab === "grasp") loadDatasets();
+    if (h.tab === "images") loadImages();
+    if (h.tab === "wake") renderClips();
+  } else render();
+});
+
+// ---------------------------------------------------------------- keyboard
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") {
+    e.preventDefault();
+    if (openDialogs.length) closeDialog(openDialogs[openDialogs.length - 1]);
+    else if (!typing(e.target)) go("KILLED");
+    return;
+  }
+  if (typing(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.code === "Space") { e.preventDefault(); go("SAFE_STOP"); return; }
+  if (openDialogs[openDialogs.length - 1] === "dlg-image") { viewerKeys(e); return; }
+  if (openDialogs.length) return;
+  if (view === "record") {
+    const phase = S?.session?.open ? S.session.phase : null;
+    if (e.key === "ArrowRight" && ["positioning", "recording", "resetting"].includes(phase)) { e.preventDefault(); sessionAction("next"); }
+    else if (["ArrowLeft", "Delete", "Backspace"].includes(e.key) && phase === "recording") { e.preventDefault(); sessionAction("rerecord"); }
+  } else if (view === "grasp" && D && cur !== null) {
+    if (e.key === "ArrowRight") { e.preventDefault(); pauseVideo(); seekFrame(frame + 1); }
+    else if (e.key === "ArrowLeft") { e.preventDefault(); pauseVideo(); seekFrame(frame - 1); }
+    else if (e.key === "ArrowDown") { e.preventDefault(); $("v-next").click(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); $("v-prev").click(); }
+  }
+});
+
+poll();
+</script>
+</body>
+</html>

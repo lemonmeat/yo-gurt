@@ -2,6 +2,7 @@
 
     uv run python -m yogurt.train.detector pretrained   # ready-made: COCO YOLO11s, its "cup"/"bowl" classes
     uv run python -m yogurt.train.detector train        # fine-tune on the boxes drawn in the UI
+    uv run python -m yogurt.train.detector preview      # live wrist camera + detector; nothing else needed
 
 `pretrained` needs no data but is only a starting point: it was never shown a yogurt cup as such and
 also fires on mugs and glasses. `train` reads data/yogurt_detection/images/**.jpg with the matching
@@ -61,14 +62,58 @@ def train(cfg, epochs: int) -> None:
     export(result.save_dir / "weights" / "best.pt", cfg)
 
 
+def preview(cfg, min_score: float) -> None:
+    """Live wrist camera + the exported detector, exactly as the app loads it. Needs nothing else plugged in."""
+    import time
+
+    import cv2
+
+    from .. import infer, vision
+    from ..cameras import Camera
+    from ..fsm import YOGURT_LABELS
+
+    detector = vision.YogurtDetector(infer.load(config.path(cfg.models.yogurt_detector)), YOGURT_LABELS)
+    camera = Camera("wrist", cfg.cameras.wrist)
+    camera.open()
+    print(f"showing detections scoring >= {min_score} (the app's check.confidence); press q to quit")
+    try:
+        while True:
+            frame = camera.read()
+            if frame is None:
+                if cv2.waitKey(100) & 0xFF == ord("q"):
+                    break
+                print(f"waiting for the wrist camera: {camera.error}", end="\r")
+                continue
+            start = time.perf_counter()
+            found = detector.detect(frame, min_score)
+            ms = (time.perf_counter() - start) * 1000
+            shown = frame.copy()
+            for d in found:
+                x1, y1, x2, y2 = d.box
+                cv2.rectangle(shown, (x1, y1), (x2, y2), (0, 220, 0), 3)
+                cv2.putText(shown, f"{d.label} {d.score:.2f}", (x1, max(30, y1 - 10)),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 220, 0), 2)
+            cv2.putText(shown, f"{len(found)} found, {ms:.0f} ms", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.2,
+                        (255, 255, 255), 3)
+            cv2.imshow("yogurt detector (q to quit)", shown)
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                break
+    finally:
+        camera.close()
+        cv2.destroyAllWindows()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("mode", choices=["pretrained", "train"])
+    parser.add_argument("mode", choices=["pretrained", "train", "preview"])
     parser.add_argument("--epochs", type=int, default=80)
+    parser.add_argument("--min-score", type=float, help="preview: score to show (default: check.confidence)")
     args = parser.parse_args()
     cfg = config.load("laptop")
     (config.ROOT / "outputs").mkdir(exist_ok=True)
-    if args.mode == "pretrained":
+    if args.mode == "preview":
+        preview(cfg, args.min_score if args.min_score is not None else cfg.check.confidence)
+    elif args.mode == "pretrained":
         export(config.ROOT / "outputs" / BASE_WEIGHTS, cfg)
     else:
         train(cfg, args.epochs)

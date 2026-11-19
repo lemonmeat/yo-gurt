@@ -62,3 +62,11 @@ handoff:
   hold_s: 0.4             # ... for this long before letting go
   release_wait_s: 1.5     # keep still after opening, so the cup is clear before retracting
   max_face_shift_deg: 30  # a face this close to the remembered bearing is the same person
+  pose_tolerance_deg: 8   # the arm counts as in the handoff pose when every joint but the pan is this close
+  # The hand-off model sees the wrist picture beside a square of the base picture around the gripper.
+  # Set these with the arm in the handoff pose, watching the white "hand-off view" box on the base video:
+  # the gripper and the space below it, where a hand closes round the cup, should fill the box.
+  base_crop:
+    row: 0.5              # box centre, as a fraction of the picture height from the top
+    size: 0.5             # box side, as a fraction of the picture height
+    shift_deg: 0          # move the box left (-) or right (+) if it sits beside the gripper

@@ -5,6 +5,10 @@ Each state is one coroutine that returns the name of the next state. The UI can 
 (go) or stand in for a model that is not trained yet (signal): "wake", "command", "found",
 "grasped", "held", "grabbed". `detail` always says, in words, what the robot is doing and why;
 `view` holds the numbers the video overlays draw.
+
+A Lab recording session (lab.Session) reuses Check and Grasp: Check finds and centres the cup, then
+Grasp records the leader arm's demonstration (_demonstrate). The session stays open only while the
+robot is in Check, Grasp or Safe Stop (paused); entering any other state closes it.
 """
 
 import asyncio
@@ -14,14 +18,17 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 
-from . import audio, config, infer, vision
+import numpy as np
+
+from . import audio, config, infer, lab, vision
 from .arm import BODY, Arm, ArmError
-from .collect import DemoRecorder, ImageCapture
+from .collect import ImageCapture
 from .parse import Command, parse_command
 
 log = logging.getLogger("yogurt.fsm")
 
 STATES = ["IDLE", "LISTEN", "PARSE", "CHECK", "GRASP", "VERIFY", "HANDOFF", "RETURN", "SAFE_STOP", "KILLED"]
+SESSION_STATES = ("CHECK", "GRASP", "SAFE_STOP")  # a recording session survives only these
 YOGURT_LABELS = ["yogurt", "cup", "bowl"]  # "yogurt" from our fine-tuned detector, the others from COCO
 
 
@@ -54,9 +61,8 @@ class Brain:
         self.cfg, self.arm, self.mic, self.wrist, self.base = cfg, arm, mic, wrist, base
         self.faces = vision.FaceTracker(cfg.cameras.base.hfov_deg)
         self.asr = audio.Transcriber(cfg)
-        self.demos = DemoRecorder(cfg)
+        self.session = lab.Session(cfg)
         self.capture = ImageCapture()
-        self.demo_mode = False
         self.state = "SAFE_STOP"
         self.detail = "Started. The arm is holding still - press Idle to begin."
         self.entered = time.monotonic()
@@ -139,12 +145,51 @@ class Brain:
         if self._task is not None:
             self._task.cancel()
 
-    def start_demos(self) -> None:
-        """Demo session: Check finds and centres the cup as usual, then the leader arm does the grasp."""
+    # ---- Lab recording sessions --------------------------------------------------------------
+
+    async def start_session(self, raw: dict) -> None:
+        """Start recording demonstrations: Check finds and centres the cup, then the leader arm does the grasp."""
+        settings = lab.settings(raw, self.cfg)
+        if self.session.busy:
+            raise RuntimeError("a recording session is already running")
+        if lab.LOCK.locked():
+            raise RuntimeError("a dataset is being changed: wait until that has finished")
+        self._check_can_record()
+        self.session.starting = True
+        try:
+            await asyncio.to_thread(self.session.start, settings)
+        finally:
+            self.session.starting = False
+        try:
+            self._check_can_record()  # Safe Stop, Kill or a state change while the leader was connecting
+        except Exception:
+            await asyncio.to_thread(self.session.close, "the robot changed state while the session was starting")
+            raise
+        self.request = Request()
+        self.say(f"recording session: {settings['num_episodes']} episode(s) into {settings['dataset']}")
+        self.go("CHECK", "recording session")
+
+    def _check_can_record(self) -> None:
+        if self.state not in ("SAFE_STOP", "IDLE") or self._forced is not None:
+            raise RuntimeError(f"the robot is busy ({self.state}): press SAFE STOP first")
+        if not self.arm.connected:
+            raise ArmError("the arm is disconnected - press Reconnect first")
         if not self.cfg.leader.port:
-            raise RuntimeError("no leader arm configured: set leader.port in the hardware config")
-        self.demo_mode = True
-        self.go("CHECK", "demonstration session")
+            raise RuntimeError(f"no leader arm configured: set leader.port in config/hardware_{self.cfg.machine}.yaml")
+        if self.wrist.error:
+            raise RuntimeError(f"the wrist camera is not working: {self.wrist.error}")
+
+    async def stop_session(self, reason: str = "recording stopped by the operator") -> None:
+        """End the session where it is: the arm holds (Safe Stop) and the dataset is finalised."""
+        if not self.session.open:
+            raise RuntimeError("no recording session is running")
+        self.go("SAFE_STOP", reason)
+        await asyncio.to_thread(self.session.close, reason)
+        self.say(f"recording session ended: {self.session.last['saved']} episode(s) saved")
+
+    def session_status(self) -> dict:
+        return self.session.status(paused=self.state == "SAFE_STOP", switching=self._forced is not None,
+                                   paused_at=self.entered)
 
     def connect(self) -> None:
         """Open cameras, microphone and arm. Each failure is reported, none stops the others."""
@@ -159,8 +204,7 @@ class Brain:
     def disconnect(self, reason: str) -> None:
         """Kill: release the servos and let go of every device."""
         self.arm.kill(reason)
-        self.demos.stop()
-        self.demo_mode = False
+        self.session.close(reason)
         self.capture.stop()
         self.mic.close()
         self.wrist.close()
@@ -186,6 +230,9 @@ class Brain:
                         self.arm.hold()
                 if self._forced is not None:  # a state forced by the operator always wins
                     following, why, self._forced = self._forced, self._why, None
+                if self.session.open and following not in SESSION_STATES:
+                    self.arm.hold()
+                    await asyncio.to_thread(self.session.close, f"the robot left the session for {following}")
                 self.state, self.entered, self.view, self.signals = following, time.monotonic(), {}, {}
                 self.say(f"entered {following}" + (f" ({why})" if why else ""))
         finally:
@@ -203,7 +250,8 @@ class Brain:
                 await asyncio.to_thread(self.faces.update, frame)
             if self.wrist.stamp != seen_wrist and (frame := self.wrist.read()) is not None:
                 seen_wrist = self.wrist.stamp
-                self.capture.offer(frame)
+                if self.capture.due():  # hand-off pictures carry the base camera's view too
+                    self.capture.offer(self.handoff_picture(frame) if self.capture.dataset == "handoff_grab" else frame)
             if not self.arm.connected and self.state != "KILLED" and self._forced is None:
                 # the arm dropped out by itself (overheated servo, pulled cable, never connected)
                 self._forced, self._why = "KILLED", self.arm.fault or "arm disconnected"
@@ -218,6 +266,21 @@ class Brain:
             pose.pop("gripper")
         return pose
 
+    def at_handoff_pose(self) -> bool:
+        """Is the arm stretched out as in Handoff (whatever its pan)? Only then is the gripper where
+        the hand-off model's base-camera square expects it."""
+        target, tolerance = self.cfg.poses.handoff, self.cfg.handoff.pose_tolerance_deg
+        return all(abs(self.arm.pos[j] - target[j]) <= tolerance for j in BODY if j != "shoulder_pan")
+
+    def handoff_picture(self, wrist: np.ndarray | None = None) -> np.ndarray | None:
+        """The hand-off model's input: the wrist frame beside the base camera's view of the gripper."""
+        wrist = self.wrist.read() if wrist is None else wrist
+        base = self.base.read()
+        if wrist is None and base is None:
+            return None
+        box = vision.gripper_box(base.shape, self.cfg, self.arm.pos["shoulder_pan"]) if base is not None else None
+        return vision.handoff_picture(wrist, base, box)
+
     def pan_for(self, bearing: float) -> float:
         """Shoulder angle that points the arm along a base-camera bearing."""
         return self.cfg.base_camera.yaw_deg + self.cfg.base_camera.pan_sign * bearing
@@ -231,9 +294,6 @@ class Brain:
 
     async def _idle(self) -> str:
         self.request = Request()
-        if self.demo_mode:
-            self.demo_mode = False
-            await asyncio.to_thread(self.demos.stop)
         await self.arm.goto(self.pose("idle"))
         entered, hits = time.monotonic(), 0
         while True:
@@ -341,8 +401,18 @@ class Brain:
         self.view["width"] = frame.shape[1]
         return found
 
+    def _give_up(self, why: str) -> str:
+        """Check failed. Normally back to Idle; in a recording session pause instead, keeping the dataset open."""
+        if self.session.open:
+            self.say(f"{why} - recording paused: put the cup within reach, then press Resume")
+            return "SAFE_STOP"
+        self.say(why)
+        return "IDLE"
+
     async def _check(self) -> str:
         cfg, request = self.cfg.check, self.request
+        if self.session.open:
+            self.session.set_phase("positioning")
         self.detail = "Raising the wrist camera to look over the table."
         await self.arm.goto(self.pose("survey", pan=self.arm.pos["shoulder_pan"]))
         if self.detector is None:
@@ -364,8 +434,7 @@ class Brain:
                 hits, end = 0, self.arm.clamp({"shoulder_pan": cfg.pan_max_deg})["shoulder_pan"]
                 while hits < cfg.confirm_frames and not (by_hand := self.take("found")):
                     if self.arm.cmd["shoulder_pan"] >= end:
-                        self.say("swept the whole table and saw no yogurt")
-                        return "IDLE"
+                        return self._give_up("swept the whole table and saw no yogurt")
                     hits = hits + 1 if await self._detect() else 0
                     self.detail = (f"Sweeping for a yogurt cup: pan {self.arm.pos['shoulder_pan']:+.0f}° "
                                    f"of {cfg.pan_min_deg:+.0f}..{cfg.pan_max_deg:+.0f}°.")
@@ -374,7 +443,9 @@ class Brain:
                     self.say("operator says the cup is centred")
                     found = None
             if found is not None and not await self._centre():
-                return "CHECK" if request.centre_failures < 3 else "IDLE"
+                if request.centre_failures < 3:
+                    return "CHECK"
+                return self._give_up("could not centre on the cup three times")
         request.yogurt_pan = self.arm.pos["shoulder_pan"]
         self.say(f"yogurt centred at pan {request.yogurt_pan:+.0f}° - arm is in the pre-grasp pose")
         return "GRASP"
@@ -416,12 +487,11 @@ class Brain:
         cfg = self.cfg.grasp
         self._gripper_closed = False
         self.request.attempts += 1
-        if self.demo_mode:
+        if self.session.open:
             try:
                 return await self._demonstrate()
             finally:
-                if self.demos.dataset is not None:
-                    self.demos.discard()  # never keep half an episode when the state is interrupted
+                self.session.discard()  # never keep half an episode when the state is interrupted
         if self.policy is None:
             self.detail = ("No trained grasp policy (models/act_grasp). Record demonstrations and train one; "
                            "until then grasp by hand and press Grasp done.")
@@ -445,64 +515,93 @@ class Brain:
         return "VERIFY"
 
     async def _demonstrate(self) -> str:
-        """Demo mode's version of Grasp: the leader arm drives, and the motion is recorded."""
-        recorder, period, fast = self.demos, 1.0 / self.cfg.grasp.fps, self.cfg.arm.max_speed_dps
+        """Grasp during a recording session, as LeLab records: the leader arm drives and the motion is recorded.
 
-        async def finish() -> str:
-            self.arm.hold()
-            await asyncio.to_thread(recorder.stop)
-            self.demo_mode = False
-            self.say("demonstration session finished")
-            return "RETURN"
+        1. Wait until the leader is held where the follower already is, so the follower never jumps.
+        2. Record until End Episode (saved), Re-record (discarded) or the episode time running out
+           (discarded and recorded again, as in LeLab: only takes you end yourself are kept).
+        3. Reset: the leader still drives, nothing is recorded, until Start Next Episode or the reset
+           time runs out. Then the next episode begins with Check finding the cup again; after the
+           last one the session ends and the arm holds where it is.
+        """
+        session, s = self.session, self.session.settings
+        period, fast = 1.0 / self.cfg.grasp.fps, self.cfg.arm.max_speed_dps
+        number = session.saved + 1
 
-        if not recorder.open:
-            self.detail = "Connecting the leader arm…"
-            await asyncio.to_thread(recorder.start)
-        while True:  # 1. wait until the leader is held where the follower already is: no jump at the start
-            leader = await asyncio.to_thread(recorder.leader_pose)
+        session.set_phase("syncing")
+        while True:  # 1
+            leader = await asyncio.to_thread(session.leader_pose)
             gap = {j: leader[j] - self.arm.pos[j] for j in BODY}
             worst = max(gap, key=lambda j: abs(gap[j]))
             if abs(gap[worst]) < 12:
                 break
-            if self.take("demo_finish"):
-                return await finish()
-            self.detail = (f"Demo: bring the leader arm to the follower's pose - {worst} is {gap[worst]:+.0f}° off. "
-                           "Recording starts by itself when they match.")
+            self.detail = (f"Episode {number}: bring the leader arm to the follower's pose - {worst} is "
+                           f"{gap[worst]:+.0f}° off. Recording starts by itself when they match.")
             await asyncio.sleep(0.1)
 
-        self.say("recording: grasp the cup, lift it a little, hold still, then press Save demo")
-        started, frames = time.monotonic(), 0
-        while True:  # 2. record
+        for stale in ("end_recording", "rerecord"):  # presses meant for an earlier phase
+            self.take(stale)
+        session.set_phase("recording")
+        self.say(f"recording episode {number}: grasp the cup, lift it a little, hold still, then End Episode")
+        frames, outcome = 0, None
+        while outcome is None:  # 2
             tick = time.monotonic()
-            action = self.arm.clamp(await asyncio.to_thread(recorder.leader_pose))
+            elapsed = tick - session.phase_started
+            action = self.arm.clamp(await asyncio.to_thread(session.leader_pose))
             frame = self.wrist.read()
             self.arm.set_target(action, fast)
             self._watch_gripper(action["gripper"])
             if frame is not None:
-                await asyncio.to_thread(recorder.add, dict(self.arm.pos), action, frame)
+                await asyncio.to_thread(session.add, dict(self.arm.pos), action, frame)
                 frames += 1
-            if self.take("demo_save"):
-                self.detail = "Saving the demonstration…"
-                total = await asyncio.to_thread(recorder.save)
-                self.say(f"demonstration saved ({frames} frames); the dataset now has {total}")
-                break
-            if self.take("demo_discard") or tick - started > 60:
-                recorder.discard()
-                self.say("demonstration discarded")
-                break
-            self.detail = f"RECORDING demonstration: {tick - started:.0f} s, {frames} frames."
-            await asyncio.sleep(max(0.0, period - (time.monotonic() - tick)))
+            if self.take("end_recording"):
+                outcome = "save"
+            elif self.take("rerecord"):
+                outcome = "rerecord"
+            elif elapsed >= s["episode_time_s"]:
+                outcome = "timeout"
+            else:
+                self.detail = (f"RECORDING episode {number} of {s['num_episodes']}: {elapsed:.0f} of "
+                               f"{s['episode_time_s']} s, {frames} frames. Grasp, lift, hold still, End Episode.")
+                await asyncio.sleep(max(0.0, period - (time.monotonic() - tick)))
 
-        self.detail = ("Not recording. The leader still drives the arm: put the cup somewhere new and let go, "
-                       "then press Next demo or Finish demos.")
-        while True:  # 3. the leader keeps driving so the operator can reset the scene
-            self.arm.set_target(self.arm.clamp(await asyncio.to_thread(recorder.leader_pose)), fast)
-            if self.take("demo_next"):
-                self.arm.hold()
-                return "CHECK"
-            if self.take("demo_finish"):
-                return await finish()
+        seconds = time.monotonic() - session.phase_started
+        if outcome == "save" and frames > 0:
+            session.set_phase("saving")
+            self.detail = f"Saving episode {number}…"
+            total = await asyncio.to_thread(session.save)
+            self.say(f"episode {number} saved ({frames} frames, {seconds:.1f} s); {s['dataset']} has {total} episodes")
+        else:
+            session.discard()
+            why = {"save": "no wrist frames arrived", "rerecord": "operator pressed Re-record",
+                   "timeout": f"the {s['episode_time_s']} s episode time ran out"}[outcome]
+            self.say(f"episode {number} discarded ({why}) - it will be recorded again")
+
+        done = session.saved >= s["num_episodes"]
+        self.take("end_reset")
+        session.set_phase("resetting")
+        limit = s["reset_time_s"]
+        while True:  # 3
+            elapsed = time.monotonic() - session.phase_started
+            if self.take("end_reset") or (limit and elapsed >= limit):
+                break
+            self.arm.set_target(self.arm.clamp(await asyncio.to_thread(session.leader_pose)), fast)
+            left = f"{limit - elapsed:.0f} s left" if limit else "no time limit"
+            if done:
+                self.detail = (f"All {s['num_episodes']} episodes recorded. Put the cup down with the leader arm "
+                               f"and open the gripper; then Finish ({left}).")
+            else:
+                self.detail = (f"Reset, not recording ({left}): put the cup somewhere new with the leader arm and "
+                               "open the gripper. Then the arm moves to the survey pose by itself and looks for it.")
             await asyncio.sleep(period)
+
+        if done:
+            self.arm.hold()
+            await asyncio.to_thread(session.close, "all episodes recorded")
+            self.say(f"recording session finished: {session.last['saved']} episode(s) saved to {s['dataset']}")
+            return "SAFE_STOP"
+        self.request = Request()  # a fresh search for the next episode
+        return "CHECK"
 
     async def _verify(self) -> str:
         cfg = self.cfg.verify
@@ -562,8 +661,8 @@ class Brain:
                 waiting = "hand-off model not trained yet: press Taken when the person holds the cup"
             else:
                 p = 0.0
-                if (frame := self.wrist.read()) is not None:
-                    p = await asyncio.to_thread(self.grab_model.prob, frame)
+                if (picture := self.handoff_picture()) is not None:
+                    p = await asyncio.to_thread(self.grab_model.prob, picture)
                 self.view["grab_p"] = p
                 above = (above or time.monotonic()) if p >= cfg.threshold else None
                 taken = taken or (above is not None and time.monotonic() - above >= cfg.hold_s)

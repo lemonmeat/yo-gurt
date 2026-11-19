@@ -27,7 +27,7 @@ logs/
 models/
 
 # Recorded data (instructions and scripts under data/ are tracked, recordings are not)
-data/grasp_act/dataset/
+data/grasp_act/*/
 data/yogurt_detection/labels/
 
 # Media

@@ -3,11 +3,12 @@
 The detector listens to the last 1.5 s of sound, ten times a second, and has to tell the wake phrase
 from everything else people say near the robot, including the word "yogurt".
 
-## Record (UI → Data collection → 1 · Wake word clips)
+## Record (Lab → Wake word)
 
 The clip is recorded by the robot's microphone, so stand where people will stand at the demo
-(0.5–3 m from the base camera, in front and off to both sides). Press **Record**, then speak; the
-default clip is 2 s. The UI steps through the phrases in [prompts.json](prompts.json) by itself.
+(0.5–3 m from the base camera, in front and off to both sides). Pick the label, press **Record**, then
+speak; the default clip is 2 s. The Lab steps through the phrases in [prompts.json](prompts.json) by
+itself (the arrows skip one), and shows the progress towards the numbers below.
 
 | Label | What to say | How many |
 |---|---|---|
@@ -17,9 +18,10 @@ default clip is 2 s. The UI steps through the phrases in [prompts.json](prompts.
 
 Tips
 
-- A positive clip must contain the phrase and nothing else; if you stumbled, delete the file
-  (`data/wake_word/positive/…wav`, newest last) and say it again.
-- The UI shows each clip's peak level. Below about 0.02 the microphone barely heard you.
+- A positive clip must contain the phrase and nothing else. Each clip can be played back right after
+  recording: if you stumbled, press **Delete** (or move it to `negative`) and say it again.
+- The Lab shows each clip's peak level and marks clips below 0.02 as quiet: the microphone barely
+  heard them. Search and filter the list, tick clips, and **Move to label** or **Delete** them.
 - More voices beat more clips from one voice. Anyone who will use the robot should record.
 
 ## Train

@@ -1,5 +1,6 @@
 """Cameras: one background thread per camera that always holds the newest frame."""
 
+import contextlib
 import glob
 import json
 import logging
@@ -21,16 +22,38 @@ def _key(text: str) -> str:
     return re.sub(r"[^a-z0-9]", "", text.lower())
 
 
+def _mac_cameras() -> list[str]:
+    """Camera names in the order OpenCV numbers them on macOS: AVFoundation's video devices sorted by
+    unique id, as OpenCV's AVFoundation backend does.
+
+    Asked of AVFoundation inside this process, which is the list OpenCV opens from. A separate tool such
+    as system_profiler can disagree with it (a camera plugged in or re-enumerated after the program
+    started), and then every index after the difference points at the wrong camera.
+    """
+    import AVFoundation
+
+    devices = AVFoundation.AVCaptureDevice.devicesWithMediaType_(AVFoundation.AVMediaTypeVideo)
+    return [str(d.localizedName()) for d in sorted(devices, key=lambda d: str(d.uniqueID()))]
+
+
+def _mac_cameras_now() -> list[str]:
+    """Every camera macOS sees right now, from a fresh process (for the error message only)."""
+    with contextlib.suppress(Exception):
+        listing = subprocess.run(["system_profiler", "-json", "SPCameraDataType"], capture_output=True, text=True)
+        return [c["_name"] for c in json.loads(listing.stdout).get("SPCameraDataType", [])]
+    return []
+
+
 def find_device(device) -> int | str:
     """Turn a camera name into what OpenCV needs. Names beat indices: indices move when USB is replugged."""
     if isinstance(device, int) or str(device).startswith("/dev/"):
         return device
     if sys.platform == "darwin":
-        listing = subprocess.run(["system_profiler", "-json", "SPCameraDataType"], capture_output=True, text=True)
-        cameras = json.loads(listing.stdout).get("SPCameraDataType", [])
-        cameras.sort(key=lambda c: c.get("spcamera_unique-id", ""))  # the order OpenCV numbers them in
-        names = [c["_name"] for c in cameras]
+        names = _mac_cameras()
         matches = [i for i, name in enumerate(names) if _key(device) in _key(name)]
+        if not matches and any(_key(device) in _key(name) for name in _mac_cameras_now()):
+            raise RuntimeError(f"camera '{device}' was connected after this program started and it cannot see it "
+                               f"yet: restart the program (cameras it can see: {names or 'none'})")
     else:
         names = sorted(glob.glob("/dev/v4l/by-id/*-video-index0"))
         matches = [name for name in names if _key(device) in _key(Path(name).name)]
