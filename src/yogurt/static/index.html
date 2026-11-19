@@ -268,7 +268,7 @@ function render() {
     ["Hand-off target", who(r.target)], ["Yogurt found at", r.yogurt_pan === null ? "—" : `pan ${r.yogurt_pan.toFixed(0)}°`],
     ["Grasp attempts", r.attempts]]));
 
-  const cls = v => /^(ok|ready)/.test(v) ? "ok" : /^(missing|loading|not configured)/.test(v) ? "warn" : /:\/\//.test(v) ? "" : "bad";
+  const cls = v => /retrain/.test(v) ? "warn" : /^(ok|ready)/.test(v) ? "ok" : /^(missing|loading|not configured)/.test(v) ? "warn" : /:\/\//.test(v) ? "" : "bad";
   const a = S.arm;
   const armText = a.connected ? (a.sim ? "simulated (no servos)" : "ok on " + esc(a.port)) + (a.torque ? "" : " — servos released") : esc(a.fault || "disconnected");
   setHTML($("health"), kv([

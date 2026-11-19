@@ -2,9 +2,9 @@
 
 Base camera:  every face with its role (REQUESTER / OTHER / TARGET) and mouth movement, the direction
               the microphones hear the voice from, and where the arm is pointing.
-              In the hand-off pose, the square the hand-off model looks at.
 Wrist camera: yogurt detections, how far the cup is from the centre line, and the live answers of the
-              grasp-verification and hand-off models.
+              grasp-verification and hand-off models; in Handoff and Safe Stop, the square of the
+              picture the hand-off model looks at (handoff.wrist_crop).
 
 The state and its 'why' sentence are not drawn here: the pages show them as text next to the feeds,
 where they stay sharp (OpenCV's font blurs once the JPEG is scaled in the browser).
@@ -87,12 +87,6 @@ def draw_base(frame: np.ndarray, brain) -> np.ndarray:
     aim = (brain.arm.pos["shoulder_pan"] - brain.cfg.base_camera.yaw_deg) * brain.cfg.base_camera.pan_sign
     cv2.drawMarker(img, (column(aim), height - 12), ORANGE, cv2.MARKER_TRIANGLE_UP, 20, 2)
     _label(img, "arm", column(aim) + 14, height - 6, ORANGE, 0.45)
-    if brain.at_handoff_pose():  # what the hand-off model sees of this camera
-        x1, y1, x2, y2 = vision.gripper_box(img.shape, brain.cfg, brain.arm.pos["shoulder_pan"])
-        grab = brain.view.get("grab_p")
-        colour = GREEN if grab is not None and grab >= brain.cfg.handoff.threshold else WHITE
-        cv2.rectangle(img, (x1, y1), (x2, y2), colour, 2)
-        _label(img, "hand-off view" + ("" if grab is None else f"  P(grabbed) {grab:.2f}"), x1 + 4, y1 + 18, colour)
     return img
 
 
@@ -109,6 +103,10 @@ def draw_wrist(frame: np.ndarray, brain) -> np.ndarray:
         if i == 0 and brain.state == "CHECK":
             centre = ((x1 + x2) // 2, (y1 + y2) // 2)
             cv2.arrowedLine(img, centre, (width // 2, centre[1]), ORANGE, 2, tipLength=0.15)
+    if brain.state in ("HANDOFF", "SAFE_STOP"):  # the square the hand-off model looks at
+        x1, y1, x2, y2 = vision.crop_box(width, height, brain.cfg.handoff.wrist_crop)
+        cv2.rectangle(img, (x1, y1), (x2, y2), WHITE, 2)
+        _label(img, "hand-off crop", x1 + 4, y1 + 16, WHITE, 0.45)
     row = 0
     if "held_p" in view:
         _bar(img, "P(held)", view["held_p"], brain.cfg.verify.threshold, row)

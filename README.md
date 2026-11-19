@@ -40,7 +40,7 @@ The program starts in **Safe Stop**: the arm holds wherever it is and nothing mo
 | **Check** | Raises the wrist camera, sweeps left → right until it sees a cup, then turns until the cup is centred. That is the pre-grasp pose. Nothing found → Idle. | `yogurt_detector.onnx` | **Yogurt centred** button |
 | **Grasp** | Runs the ACT policy for `grasp.duration_s`. | `models/act_grasp/` (you train it) | grasp by hand, **Grasp done** |
 | **Verify** | Lifts the cup in front of the wrist camera and asks "is it held?". No → back to Check, for as long as it takes. | `grasp_verify.onnx` (you train it) | **Held / Not held** |
-| **Handoff** | Turns to the target person, reaches out, waits for a hand to take the cup, lets go. Nobody in 10 s → puts the cup back where the gripper closed on it. | `handoff_grab.onnx` (you train it), watching the wrist camera and the base camera's view of the gripper | **Taken** |
+| **Handoff** | Turns to the target person, reaches out, waits for a hand to take the cup, lets go. Nobody in 10 s → puts the cup back where the gripper closed on it. | `handoff_grab.onnx` (you train it) | **Taken** |
 | **Return** | Back to the `idle` pose, then Idle. | — | — |
 | **Safe Stop** | Freezes the arm; servos stay powered and hold. (Space bar) | — | — |
 | **Kill** | Releases every servo and disconnects arm, cameras and microphone. (Esc) **Reconnect hardware** brings it back, in Safe Stop. | — | — |
@@ -63,8 +63,6 @@ replace guesses in the config with facts about your robot.
    - `survey`: wrist camera looking down at the table, gripper open and about 15 cm above the table.
      Check sweeps in this pose, and every grasp starts from it.
    - `handoff`: arm stretched out, gripper level so the cup stays upright (its gripper value is ignored).
-     Then, still in that pose, look at the white **hand-off view** box on the base video: set
-     `handoff.base_crop` in `config/robot.yaml` so the gripper and the space under it fill the box.
 4. **Directions.** Jog `shoulder_pan` with **+5**. If things in the *wrist* picture slide right instead
    of left, set `check.pan_sign: -1` in `config/robot.yaml`. Run a request and look at the top view: if the
    arm turns away from the person, fix `base_camera.pan_sign` / `base_camera.yaw_deg`.

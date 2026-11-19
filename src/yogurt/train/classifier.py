@@ -8,6 +8,11 @@ Writes  models/<task>.onnx and models/<task>.json
 
 A MobileNetV3-small pretrained on ImageNet is fine-tuned on whole (squashed) wrist frames. Whole
 recording sessions are held out for validation, because neighbouring frames are near-duplicates.
+
+handoff_grab looks only at a square of the wrist picture around the cup (handoff.wrist_crop in
+config/robot.yaml), so the fingers on the cup get more detail and people in the background drop out.
+Pictures are saved whole and cropped here; the crop is written into the model's .json, and the robot
+cuts out the same square (vision.Classifier).
 """
 
 import argparse
@@ -20,10 +25,15 @@ import torch
 from torch import nn
 from torchvision import models
 
-from .. import config
+from .. import config, vision
 
 TASKS = {"grasp_verify": ["empty", "held"], "handoff_grab": ["not_grabbed", "grabbed"]}  # second label = "yes"
 SIZE = 224
+
+
+def crop_for(task: str, cfg) -> dict | None:
+    """The square of the picture a task's model looks at, or None for the whole picture."""
+    return dict(cfg.handoff.wrist_crop) if task == "handoff_grab" else None
 
 
 class Net(nn.Module):
@@ -36,28 +46,47 @@ class Net(nn.Module):
         self.register_buffer("mean", torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1))
         self.register_buffer("std", torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1))
 
+    def train(self, mode: bool = True):
+        """Fine-tune with the batch-norm layers frozen (ImageNet statistics, also while training).
+
+        Otherwise each layer normalises a training batch by that batch's own statistics but a single
+        picture by running averages that move slowly (momentum 0.01) and are skewed by the few,
+        near-identical bursts here. The network then learns something that does not carry over:
+        validation and the robot saw one class for every picture, even pictures it was trained on.
+        """
+        super().train(mode)
+        for layer in self.modules():
+            if isinstance(layer, nn.BatchNorm2d):
+                layer.eval()
+        return self
+
     def forward(self, image):
         return self.backbone((image - self.mean) / self.std)
 
 
-def load_image(file, augment: bool, rng: random.Random) -> np.ndarray:
+def load_image(file, augment: bool, rng: random.Random, crop: dict | None = None) -> np.ndarray:
     image = cv2.imread(str(file))
+    if crop:
+        x1, y1, x2, y2 = vision.crop_box(image.shape[1], image.shape[0], crop)
+        image = image[y1:y2, x1:x2]
     if augment:  # lighting and small framing changes; no flips, the gripper always looks the same way round
         h, w = image.shape[:2]
         dx, dy = int(w * rng.uniform(0, 0.08)), int(h * rng.uniform(0, 0.08))
         image = image[dy:h - int(h * rng.uniform(0, 0.08)), dx:w - int(w * rng.uniform(0, 0.08))]
         image = cv2.convertScaleAbs(image, alpha=rng.uniform(0.7, 1.3), beta=rng.uniform(-25, 25))
     image = cv2.cvtColor(cv2.resize(image, (SIZE, SIZE), interpolation=cv2.INTER_AREA), cv2.COLOR_BGR2RGB)
-    return image.transpose(2, 0, 1).astype(np.float32) / 255
+    # A real copy in channel-first order: a transposed view keeps channel-last strides, which Apple's MPS
+    # backward pass rejects ("view size is not compatible with input tensor's size and stride").
+    return np.ascontiguousarray(image.transpose(2, 0, 1), dtype=np.float32) / 255
 
 
-def batches(items, size, augment, rng):
+def batches(items, size, augment, rng, crop=None):
     items = items[:]
     if augment:
         rng.shuffle(items)
     for i in range(0, len(items), size):
         chunk = items[i:i + size]
-        yield (torch.from_numpy(np.stack([load_image(f, augment, rng) for f, _ in chunk])),
+        yield (torch.from_numpy(np.stack([load_image(f, augment, rng, crop) for f, _ in chunk])),
                torch.tensor([label for _, label in chunk]))
 
 
@@ -69,6 +98,9 @@ def main() -> None:
     cfg, rng = config.load("laptop"), random.Random(0)
     torch.manual_seed(0)
     labels, root = TASKS[args.task], config.ROOT / "data" / args.task
+    crop = crop_for(args.task, cfg)
+    if crop:
+        print(f"looking at a square of the picture: {crop} (handoff.wrist_crop)")
 
     train, val = [], []
     for index, label in enumerate(labels):
@@ -90,8 +122,9 @@ def main() -> None:
                 (val if session in held_out else train).extend(images)
         print(f"{label}: {total} images in {len(sessions)} session(s)")
 
-    # CUDA if there is one, else CPU (Apple's MPS backend fails on this network's backward pass).
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    # CUDA, else Apple's GPU (MPS: about 45x faster than the CPU per batch on an M3), else the CPU.
+    device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
+    print(f"training on {device}")
     model = Net().to(device)
     optimiser = torch.optim.AdamW(model.parameters(), 3e-4, weight_decay=1e-4)
     counts = np.bincount([label for _, label in train], minlength=2)
@@ -99,7 +132,7 @@ def main() -> None:
     best, best_state = -1.0, None
     for epoch in range(1, args.epochs + 1):
         model.train()
-        for x, y in batches(train, 32, True, rng):
+        for x, y in batches(train, 32, True, rng, crop):
             loss = loss_fn(model(x.to(device)), y.to(device))
             optimiser.zero_grad()
             loss.backward()
@@ -107,7 +140,7 @@ def main() -> None:
         model.eval()
         confusion = np.zeros((2, 2), int)
         with torch.no_grad():
-            for x, y in batches(val, 64, False, rng):
+            for x, y in batches(val, 64, False, rng, crop):
                 for truth, guess in zip(y.tolist(), model(x.to(device)).argmax(1).tolist(), strict=True):
                     confusion[truth, guess] += 1
         balanced = float(np.mean([confusion[i, i] / max(1, confusion[i].sum()) for i in range(2)]))
@@ -123,7 +156,7 @@ def main() -> None:
     torch.onnx.export(model, torch.zeros(1, 3, SIZE, SIZE), str(out), input_names=["image"],
                       output_names=["logits"], dynamo=False)
     out.with_suffix(".json").write_text(json.dumps(
-        {"classes": labels, "validation_balanced_accuracy": round(best, 3),
+        {"classes": labels, "validation_balanced_accuracy": round(best, 3), **({"crop": crop} if crop else {}),
          "images": {"train": len(train), "validation": len(val)}}, indent=2))
     print(f"wrote {out} (validation balanced accuracy {best:.3f}) - restart the app or press Reload models")
 

@@ -6,7 +6,6 @@ so the saved videos show exactly which takes were kept.
 
 import asyncio
 import base64
-import random
 
 import av
 import cv2
@@ -323,58 +322,3 @@ def test_wake_clips_and_wrist_images_can_be_tidied(monkeypatch, data):
             assert (await call("POST", "/api/lab/images/delete", {**held, "burst": first["burst"]}))[0] == 200
 
     asyncio.run(scenario())
-
-
-def test_handoff_pictures_pair_the_wrist_with_the_base_view_of_the_gripper(monkeypatch, data):
-    from yogurt import vision
-    from yogurt.train import classifier
-
-    class Still(GreyCamera):
-        def __init__(self, image):
-            super().__init__()
-            self.image = image
-
-        def read(self, max_age_s=1.0):
-            return self.image
-
-    base = np.zeros((720, 1280, 3), np.uint8)
-    base[:, 640:] = 200  # the right half of the base picture is bright
-    brain = make_brain(monkeypatch)
-    brain.wrist, brain.base = Still(np.full((90, 160, 3), 90, np.uint8)), Still(base)
-    cfg = brain.cfg
-    cfg.handoff.base_crop.update(row=0.5, size=0.5, shift_deg=0)
-
-    # straight ahead the square sits in the middle of the base picture; it follows the pan
-    assert vision.gripper_box(base.shape, cfg, 0.0) == (460, 180, 820, 540)
-    x1, _, x2, _ = vision.gripper_box(base.shape, cfg, 20.0)
-    assert x1 > 460 and x2 - x1 == 360
-    picture = vision.handoff_picture(brain.wrist.read(), base, (460, 180, 820, 540))
-    side = vision.HANDOFF_SIDE
-    assert picture.shape == (side, 2 * side, 3)
-    assert picture[:, :side].mean() == pytest.approx(90, abs=1)                # wrist, whole
-    assert picture[:, side:side + side // 3].mean() < 5                         # base, left of centre: dark
-    assert picture[:, 2 * side - side // 3:].mean() > 195                       # base, right of centre: bright
-    off = vision.handoff_picture(None, base, (-2000, 180, -1640, 540))          # far off the picture: black
-    assert off.max() == 0
-
-    # a hand-off burst saves those pictures; other sets keep saving plain wrist frames
-    async def watch_once():
-        with pytest.raises(TimeoutError):
-            await asyncio.wait_for(brain._watch(), 0.3)
-
-    saved = {}
-    for dataset, label in [("handoff_grab", "grabbed"), ("grasp_verify", "held")]:
-        brain.capture.start(dataset, label, 2)
-        brain.wrist.stamp += 1
-        asyncio.run(watch_once())
-        folder = brain.capture.folder
-        brain.capture.stop()
-        files = sorted(folder.glob("*.jpg"))
-        assert len(files) == 1
-        saved[dataset] = cv2.imread(str(files[0])), files[0]
-    assert saved["handoff_grab"][0].shape == (side, 2 * side, 3)
-    assert saved["grasp_verify"][0].shape == (90, 160, 3)
-
-    # the trainer feeds the model both views at 224 x 224, side by side
-    x = classifier.load_image(saved["handoff_grab"][1], True, random.Random(0), halves=True)
-    assert x.shape == (3, classifier.SIZE, 2 * classifier.SIZE)

@@ -141,8 +141,7 @@ def move_clips(items, to: str) -> int:
 
 
 class ImageCapture:
-    """Saves wrist-camera frames (hand-off pictures for handoff_grab) at a steady rate while it is running.
-    One instance, one burst at a time."""
+    """Saves wrist-camera frames at a steady rate while it is running. One instance, one burst at a time."""
 
     def __init__(self):
         self.folder: Path | None = None
@@ -161,17 +160,10 @@ class ImageCapture:
         self.folder = None
         return self.saved
 
-    @property
-    def dataset(self) -> str | None:
-        return None if self.folder is None else self.folder.parent.parent.name
-
-    def due(self) -> bool:
-        return self.folder is not None and time.monotonic() >= self._next
-
-    def offer(self, frame: np.ndarray | None) -> None:
-        """Called with every new wrist frame (or hand-off picture); keeps the ones that are due."""
+    def offer(self, frame: np.ndarray) -> None:
+        """Called with every new wrist frame; keeps the ones that are due."""
         now = time.monotonic()
-        if self.folder is not None and frame is not None and now >= self._next:
+        if self.folder is not None and now >= self._next:
             cv2.imwrite(str(self.folder / f"{self.saved:05d}.jpg"), frame, [cv2.IMWRITE_JPEG_QUALITY, 92])
             self.saved, self._next = self.saved + 1, now + self._period
 

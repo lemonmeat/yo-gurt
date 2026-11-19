@@ -419,7 +419,7 @@
   <div class="cols2">
     <div class="card pad">
       <div class="ctitle">Capture</div>
-      <div class="feedbox"><img id="i-feed" alt="live camera"><span class="tag" id="i-feed-tag">live wrist camera — the saved pictures have no overlays</span></div>
+      <div class="feedbox"><img id="i-feed" alt="wrist camera"><span class="tag">live wrist camera — the saved pictures have no overlays</span></div>
       <div class="recrow" style="margin-top:12px">
         <button class="bigred" id="i-capture"><svg class="i"><use href="#i-disc"/></svg><span>Start saving</span></button>
         <input type="number" class="num" id="i-rate" min="0.2" max="10" step="0.2" value="2" aria-label="Pictures per second"><span class="dim">pictures per second</span>
@@ -1168,7 +1168,7 @@ function modelLine(id, status) {  // called on every status poll: only rebuilt w
   const key = `${text}|${canReload}`;
   if ($(id).dataset.key === key) return;
   $(id).dataset.key = key;
-  $(id).innerHTML = `<span>Model:</span><span class="${ok ? "ok" : /^missing/.test(text) ? "warnt" : "badt"}">${esc(text)}</span>
+  $(id).innerHTML = `<span>Model:</span><span class="${ok ? "ok" : /^missing|retrain/.test(text) ? "warnt" : "badt"}">${esc(text)}</span>
     <button class="btn sm" data-reload ${canReload ? "" : "disabled"} title="Load model files again after training (Safe Stop only)">Reload models</button>`;
   $(id).querySelector("[data-reload]").onclick = () => tryPost("/api/models/reload", {}, "Models not reloaded").then(() => toast("Models reloaded")).catch(() => {});
 }
@@ -1187,7 +1187,7 @@ const HELPERS = {
   grasp_verify: {hint:"Run a request through to Verify: the arm lifts the cup to the camera and waits there. Save a burst while it waits; Not held sends it round again for the next one.",
     buttons:[["Idle", "state", "IDLE", null], REQUEST, ["Yogurt centred", "signal", "found", ["CHECK"]], ["Grasp done", "signal", "grasped", ["GRASP"]],
              ["Not held — go round again", "held", false, ["VERIFY"]]]},
-  handoff_grab: {hint:"Run a request through to Handoff (arm stretched out holding the cup), then SAFE STOP so it stays put. Each picture pairs the wrist camera with the base camera's view of the gripper: check the right half shows the gripper (handoff.base_crop in robot.yaml). Rest the arm with Return about once a minute: the shoulder works hard in that pose.",
+  handoff_grab: {hint:"Run a request through to Handoff (arm stretched out holding the cup), then SAFE STOP so it stays put. Use that same pose for every burst, grabbed and not grabbed. The model only sees the white hand-off crop box: keep the cup and the hand around it inside it. Rest the arm with Return about once a minute: the shoulder works hard in that pose.",
     buttons:[["Idle", "state", "IDLE", null], REQUEST, ["Yogurt centred", "signal", "found", ["CHECK"]], ["Grasp done", "signal", "grasped", ["GRASP"]],
              ["Held — go to Handoff", "held", true, ["VERIFY"]], ["Return (rest the arm)", "state", "RETURN", null]]},
 };
@@ -1203,13 +1203,10 @@ function burstName(name) {
   const d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
   return d.toLocaleString([], {month:"short", day:"numeric", hour:"2-digit", minute:"2-digit", second:"2-digit"}) + (m[7] ? ` (${m[7].slice(1)})` : "");
 }
-function imageFeed(on) {  // hand-off pictures pair the wrist camera with the base camera's view of the gripper
-  const img = $("i-feed"), handoff = !!iset && dsOf(iset) === "handoff_grab";
-  const src = location.origin + (handoff ? "/video/handoff" : "/video/wrist");
-  if (on && img.getAttribute("src") !== src) img.src = src;
+function imageFeed(on) {
+  const img = $("i-feed");
+  if (on && !img.getAttribute("src")) img.src = location.origin + "/video/wrist";
   if (!on && img.getAttribute("src")) img.removeAttribute("src");
-  $("i-feed-tag").textContent = handoff ? "live: wrist camera | base camera around the gripper — saved exactly like this"
-    : "live wrist camera — the saved pictures have no overlays";
 }
 
 async function loadImages() {
@@ -1247,7 +1244,6 @@ function renderImageSets() {
   $("i-helpers").innerHTML = help.buttons.map((b, i) => `<button class="btn sm" data-h="${i}">${esc(b[0])}</button>`).join("");
   $("i-helpers").querySelectorAll("[data-h]").forEach(btn => btn.onclick = () => helper(help.buttons[+btn.dataset.h]));
   $("i-shots").innerHTML = (IM.shots[iset] || []).map(t => `<li>${esc(t)}</li>`).join("");
-  imageFeed(view === "images");
   renderImagesLive();
 }
 $("i-set").onchange = () => { iset = $("i-set").value; localStorage.setItem("yogurt.lab.iset", iset); burst = null; renderImageSets(); loadBursts(); };

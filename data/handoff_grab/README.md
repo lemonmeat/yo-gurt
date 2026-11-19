@@ -1,22 +1,21 @@
 # Hand-off: has someone taken hold of the cup?
 
-In Handoff the arm holds the cup out and this model watches two cameras at once. Each picture it sees
-(and each one the Lab saves) is two squares side by side:
+In Handoff the arm holds the cup out and this model watches the wrist picture. When it has seen
+`grabbed` for 0.4 s the gripper opens. If the gripper opens too early the yogurt lands on the floor,
+so the `not_grabbed` examples that look almost like a grab are the ones that matter.
 
-- **left**: the whole wrist picture, close up on the cup and the fingers touching it;
-- **right**: the part of the base picture around the gripper, which shows best whether a hand is
-  under the cup. Its column follows the arm's pan; its height and size are `handoff.base_crop` in
-  `config/robot.yaml`.
+## The crop: what the model looks at
 
-When it has seen `grabbed` for 0.4 s the gripper opens. If the gripper opens too early the yogurt
-lands on the floor, so the `not_grabbed` examples that look almost like a grab are the ones that matter.
+The model sees only a square of the wrist picture around the cup (`handoff.wrist_crop` in
+`config/robot.yaml`), not the whole wide-angle frame: fingers on the cup get more detail, and people
+in the background, which the model would otherwise learn instead of the hand, drop out. In Handoff
+and Safe Stop the wrist video draws it as the white **hand-off crop** box.
 
-## Before recording: aim the base-camera square
-
-With the arm in the handoff pose (step 1 below), the base video draws a white **hand-off view** box.
-Change `handoff.base_crop` (`row`, `size`, `shift_deg`) until the gripper and the space under it fill
-the box, restart, and check again; the Lab's live picture shows exactly what will be saved. Pictures
-recorded with one crop do not suit another: if you change it later, record again.
+Set it once, with the arm holding the cup in the handoff pose: the cup and the space a hand needs
+around it on every side should fill the box. Change `x`, `y` (the centre, as fractions of the width
+and height) and `size` (as a fraction of the height), restart, look again. Pictures are saved whole, so
+a new crop needs only a retrain. Record every burst, `grabbed` and `not_grabbed`, in the same arm pose,
+so the cup always sits in the same place in the picture.
 
 ## Record (Lab → Wrist images → Hand-off — grabbed / not grabbed)
 
@@ -43,8 +42,8 @@ yet (or no longer) holding on.
 uv run python -m yogurt.train.classifier handoff_grab
 ```
 
-Writes `models/handoff_grab.onnx` (input 448 × 224: both views at 224 × 224). While training, one view
-is blacked out in a fifth of the pictures, so the model still works from the other when a camera drops
-out or a hand hides one view. During Handoff the wrist video shows P(grabbed) against
+Writes `models/handoff_grab.onnx` and, in `models/handoff_grab.json`, the crop it was trained on; the
+robot cuts out the same square. If `handoff.wrist_crop` changes afterwards, the robot page says the
+model needs retraining. During Handoff the wrist video shows P(grabbed) against
 `handoff.threshold`; raise the threshold or `handoff.hold_s` in `config/robot.yaml` if it lets go too
 eagerly.

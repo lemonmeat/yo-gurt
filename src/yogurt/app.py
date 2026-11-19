@@ -60,23 +60,17 @@ def make_app(cfg, brain: Brain) -> web.Application:
 
     @routes.get("/video/{camera}")
     async def video(request):
-        """base, wrist: the cameras with overlays. handoff: the hand-off model's input, as it is saved."""
         name = request.match_info["camera"]
-        if name not in ("base", "wrist", "handoff"):
+        if name not in ("base", "wrist"):
             raise web.HTTPNotFound()
         response = web.StreamResponse(headers={"Content-Type": "multipart/x-mixed-replace; boundary=frame",
                                                "Cache-Control": "no-cache"})
         await response.prepare(request)
 
         def render() -> bytes:
-            if name == "handoff":
-                img = brain.handoff_picture()
-                if img is None:
-                    img = overlay.no_signal("wrist and base", brain.wrist.error or brain.base.error)
-            else:
-                camera, draw = (brain.base, overlay.draw_base) if name == "base" else (brain.wrist, overlay.draw_wrist)
-                frame = camera.read()
-                img = draw(frame, brain) if frame is not None else overlay.no_signal(name, camera.error)
+            camera, draw = (brain.base, overlay.draw_base) if name == "base" else (brain.wrist, overlay.draw_wrist)
+            frame = camera.read()
+            img = draw(frame, brain) if frame is not None else overlay.no_signal(name, camera.error)
             return cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 85])[1].tobytes()
 
         with contextlib.suppress(ConnectionResetError, asyncio.CancelledError):

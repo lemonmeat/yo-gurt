@@ -18,8 +18,6 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 
-import numpy as np
-
 from . import audio, config, infer, lab, vision
 from .arm import BODY, Arm, ArmError
 from .collect import ImageCapture
@@ -115,6 +113,9 @@ class Brain:
         self.detector = attempt("yogurt_detector", lambda f: vision.YogurtDetector(infer.load(f), YOGURT_LABELS))
         self.verifier = attempt("grasp_verify", lambda f: vision.Classifier(infer.load(f)))
         self.grab_model = attempt("handoff_grab", lambda f: vision.Classifier(infer.load(f)))
+        if self.grab_model is not None and self.grab_model.crop != dict(self.cfg.handoff.wrist_crop):
+            trained_on = self.grab_model.crop or "the whole picture"
+            self.models["handoff_grab"] = f"ready, but trained on {trained_on}, not handoff.wrist_crop: retrain"
         self.policy = attempt("act_grasp", grasp_policy)
 
     # ---- plumbing ---------------------------------------------------------------------------
@@ -250,8 +251,7 @@ class Brain:
                 await asyncio.to_thread(self.faces.update, frame)
             if self.wrist.stamp != seen_wrist and (frame := self.wrist.read()) is not None:
                 seen_wrist = self.wrist.stamp
-                if self.capture.due():  # hand-off pictures carry the base camera's view too
-                    self.capture.offer(self.handoff_picture(frame) if self.capture.dataset == "handoff_grab" else frame)
+                self.capture.offer(frame)
             if not self.arm.connected and self.state != "KILLED" and self._forced is None:
                 # the arm dropped out by itself (overheated servo, pulled cable, never connected)
                 self._forced, self._why = "KILLED", self.arm.fault or "arm disconnected"
@@ -265,21 +265,6 @@ class Brain:
         if not gripper:
             pose.pop("gripper")
         return pose
-
-    def at_handoff_pose(self) -> bool:
-        """Is the arm stretched out as in Handoff (whatever its pan)? Only then is the gripper where
-        the hand-off model's base-camera square expects it."""
-        target, tolerance = self.cfg.poses.handoff, self.cfg.handoff.pose_tolerance_deg
-        return all(abs(self.arm.pos[j] - target[j]) <= tolerance for j in BODY if j != "shoulder_pan")
-
-    def handoff_picture(self, wrist: np.ndarray | None = None) -> np.ndarray | None:
-        """The hand-off model's input: the wrist frame beside the base camera's view of the gripper."""
-        wrist = self.wrist.read() if wrist is None else wrist
-        base = self.base.read()
-        if wrist is None and base is None:
-            return None
-        box = vision.gripper_box(base.shape, self.cfg, self.arm.pos["shoulder_pan"]) if base is not None else None
-        return vision.handoff_picture(wrist, base, box)
 
     def pan_for(self, bearing: float) -> float:
         """Shoulder angle that points the arm along a base-camera bearing."""
@@ -631,7 +616,8 @@ class Brain:
     def _locate(self, person: Person) -> float:
         """Where is this person now? Their tracked face; else the nearest face to where they were; else memory."""
         faces = self.faces.visible()
-        taken = {p.id for p in [self.request.requester, *self.request.others] if p is not person}
+        # other people's faces; there may be no requester (Handoff reached by jumping straight to a state)
+        taken = {p.id for p in [self.request.requester, *self.request.others] if p is not None and p is not person}
         match = next((f for f in faces if f.id == person.id), None)
         if match is None:
             near = [f for f in faces if f.id not in taken
@@ -661,8 +647,8 @@ class Brain:
                 waiting = "hand-off model not trained yet: press Taken when the person holds the cup"
             else:
                 p = 0.0
-                if (picture := self.handoff_picture()) is not None:
-                    p = await asyncio.to_thread(self.grab_model.prob, picture)
+                if (frame := self.wrist.read()) is not None:
+                    p = await asyncio.to_thread(self.grab_model.prob, frame)
                 self.view["grab_p"] = p
                 above = (above or time.monotonic()) if p >= cfg.threshold else None
                 taken = taken or (above is not None and time.monotonic() - above >= cfg.hold_s)

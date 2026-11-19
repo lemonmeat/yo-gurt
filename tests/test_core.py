@@ -101,6 +101,13 @@ def test_full_request_then_safe_stop_and_kill(monkeypatch):
         brain.signal("grabbed")
         await reach(brain, "IDLE")
 
+        brain.go("HANDOFF")  # jumping straight there: no requester, nobody in view
+        await reach(brain, "HANDOFF")
+        await asyncio.sleep(0.5)
+        assert brain.state == "HANDOFF", brain.events[0]
+        brain.signal("grabbed")
+        await reach(brain, "IDLE")
+
         brain.arm.set_target({"shoulder_pan": 60.0}, speed=5)   # a slow move in progress...
         brain.go("SAFE_STOP")                                    # ...is frozen at once, servos still on
         assert brain.arm.target == brain.arm.cmd and brain.arm.torque
@@ -127,3 +134,37 @@ def test_web_interface_requires_the_password(monkeypatch):
             assert status.status == 200 and (await status.json())["state"] == "SAFE_STOP"
 
     asyncio.run(scenario())
+
+
+def test_handoff_model_sees_the_same_square_of_the_wrist_picture_in_training_and_on_the_robot(tmp_path):
+    import random
+
+    import cv2
+
+    from yogurt import vision
+    from yogurt.train import classifier
+
+    crop = {"x": 0.5, "y": 0.7, "size": 0.6}
+    assert vision.crop_box(1280, 720, crop) == (424, 288, 856, 720)        # pushed up to stay in the picture
+    assert vision.crop_box(640, 360, crop) == (212, 144, 428, 360)         # fractions: any resolution
+    assert vision.crop_box(1280, 720, {"x": 0.0, "y": 0.0, "size": 2}) == (0, 0, 720, 720)
+
+    picture = np.zeros((720, 1280, 3), np.uint8)
+    picture[288:720, 424:856] = 255                                        # only the square is white
+    file = tmp_path / "00000.jpg"
+    cv2.imwrite(str(file), picture)
+    trained = classifier.load_image(file, False, random.Random(0), crop)
+    assert trained.shape == (3, classifier.SIZE, classifier.SIZE) and trained.min() > 0.9
+
+    seen = []
+
+    class Model:
+        width = height = classifier.SIZE
+        meta = {"classes": ["not_grabbed", "grabbed"], "crop": crop}
+
+        def run(self, rgb):
+            seen.append(rgb)
+            return [np.array([0.0, 1.0])]
+
+    vision.Classifier(Model()).prob(picture)
+    assert seen[0].min() > 230                                             # the robot cut out the same square

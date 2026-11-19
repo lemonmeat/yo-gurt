@@ -2,7 +2,6 @@
 
 Base camera:  faces, where each one is (bearing) and how much its mouth is moving.
 Wrist camera: yogurt cups (detector) and yes/no questions about the gripper (classifiers).
-Hand-off:     the wrist frame beside the base camera's view of the gripper, for the hand-off model.
 """
 
 import math
@@ -33,42 +32,13 @@ def column_for(bearing: float, width: int, hfov_deg: float) -> float:
     return width / 2 + focal * math.tan(math.radians(max(-85.0, min(85.0, bearing))))
 
 
-# ---- hand-off picture -----------------------------------------------------------------------
-
-HANDOFF_SIDE = 384  # each half of a saved hand-off picture is this many pixels square
-
-
-def gripper_box(shape, cfg, pan: float) -> tuple[int, int, int, int]:
-    """The square of the base picture around the gripper when the arm is in the hand-off pose.
-
-    Its column follows the arm's pan; its height and size are set once in robot.yaml
-    (handoff.base_crop), by looking at the box the base video draws. It may run past the picture's edges.
-    """
-    height, width = shape[:2]
-    crop = cfg.handoff.base_crop
-    bearing = (pan - cfg.base_camera.yaw_deg) * cfg.base_camera.pan_sign + crop.shift_deg
-    cx, cy, half = column_for(bearing, width, cfg.cameras.base.hfov_deg), crop.row * height, crop.size * height / 2
-    return round(cx - half), round(cy - half), round(cx + half), round(cy + half)
-
-
-def handoff_picture(wrist: np.ndarray | None, base: np.ndarray | None, box) -> np.ndarray:
-    """What the hand-off model sees: the whole wrist frame (left) beside the base camera's view of the
-    gripper (right), each squashed to a square. A missing camera, or the part of the box outside the
-    base picture, is black."""
-    side = HANDOFF_SIDE
-    left = np.zeros((side, side, 3), np.uint8)
-    if wrist is not None:
-        left = cv2.resize(wrist, (side, side), interpolation=cv2.INTER_AREA)
-    right = np.zeros((side, side, 3), np.uint8)
-    if base is not None:
-        x1, y1, x2, y2 = box
-        height, width = base.shape[:2]
-        crop = np.zeros((y2 - y1, x2 - x1, 3), np.uint8)
-        ix1, iy1, ix2, iy2 = max(x1, 0), max(y1, 0), min(x2, width), min(y2, height)
-        if ix1 < ix2 and iy1 < iy2:
-            crop[iy1 - y1:iy2 - y1, ix1 - x1:ix2 - x1] = base[iy1:iy2, ix1:ix2]
-        right = cv2.resize(crop, (side, side), interpolation=cv2.INTER_AREA)
-    return np.hstack([left, right])
+def crop_box(width: int, height: int, crop) -> tuple[int, int, int, int]:
+    """A square of side crop["size"] x the picture height, centred at (crop["x"] x width, crop["y"] x height),
+    moved inside the picture if it would stick out. Fractions, so it fits any resolution."""
+    side = min(round(crop["size"] * height), width, height)
+    x1 = min(max(round(crop["x"] * width - side / 2), 0), width - side)
+    y1 = min(max(round(crop["y"] * height - side / 2), 0), height - side)
+    return x1, y1, x1 + side, y1 + side
 
 
 # ---- faces ----------------------------------------------------------------------------------
@@ -250,13 +220,20 @@ class YogurtDetector:
 
 
 class Classifier:
-    """A two-class image classifier exported by yogurt.train.classifier; prob() is P(second class)."""
+    """A two-class image classifier exported by yogurt.train.classifier; prob() is P(second class).
+
+    If the model was trained on a square of the picture (its .json has a "crop"), the same square is cut
+    out here, so the robot always sees what training saw."""
 
     def __init__(self, model):
         self.model = model
         self.classes = model.meta["classes"]
+        self.crop = model.meta.get("crop")
 
     def prob(self, frame: np.ndarray) -> float:
+        if self.crop:
+            x1, y1, x2, y2 = crop_box(frame.shape[1], frame.shape[0], self.crop)
+            frame = frame[y1:y2, x1:x2]
         small = cv2.resize(frame, (self.model.width, self.model.height), interpolation=cv2.INTER_AREA)
         logits = np.asarray(self.model.run(cv2.cvtColor(small, cv2.COLOR_BGR2RGB))[0], dtype=np.float64).reshape(-1)
         odds = np.exp(logits - logits.max())
