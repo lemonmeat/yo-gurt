@@ -11,6 +11,8 @@ dependencies = [
     "sounddevice>=0.5",                     # stereo mic capture (PortAudio)
     "faster-whisper>=1.1",                  # speech-to-text for the spoken command
     "onnxruntime>=1.20",                    # CPU inference for every model we train
+    "torch",                                # via lerobot; listed so the Pi can take the CPU build below
+    "torchvision",
     "pyobjc-framework-avfoundation>=10 ; sys_platform == 'darwin'",
 ]
 
@@ -36,6 +38,17 @@ build-backend = "uv_build"
 [tool.uv]
 # ultralytics asks for opencv-python, which overwrites the headless build lerobot pins. One cv2 only.
 exclude-dependencies = ["opencv-python"]
+
+# PyPI's Linux aarch64 torch wheels pull in ~2.8 GB of CUDA libraries, useless on the Pi.
+# Take the CPU-only build there; x86 Linux (GPU training boxes) and macOS keep PyPI's builds.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux' and platform_machine == 'aarch64'" }]
+torchvision = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux' and platform_machine == 'aarch64'" }]
 
 [tool.ruff]
 line-length = 120
