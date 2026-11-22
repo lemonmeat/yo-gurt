@@ -2,7 +2,7 @@
 # Everything that is the same on every computer (poses, timings, thresholds) lives in robot.yaml.
 
 web:
-  host: 127.0.0.1        # local testing only; use 0.0.0.0 to reach it from other machines
+  host: 0.0.0.0          # reachable on the local network; 127.0.0.1 = this laptop only
   port: 8080
   user: gurt
   password: gurt

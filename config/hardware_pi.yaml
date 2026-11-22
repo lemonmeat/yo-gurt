@@ -9,11 +9,13 @@ web:
   password: gurt
 
 arm:
-  port: auto             # the only /dev/ttyACM* (after excluding leader.port); or an explicit path
+  port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5B8E1153981-if00
+  # the only /dev/ttyACM* (after excluding leader.port); or an explicit path
   calibration: config/arm_config.json
 
 leader:
-  port: null             # demos are normally recorded on the laptop
+  port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_59700722681-if00
+  # demos are normally recorded on the laptop
   calibration: config/leader_config.json
 
 cameras:

@@ -10,6 +10,7 @@ import contextlib
 import hmac
 import json
 import logging
+import socket
 import time
 from pathlib import Path
 
@@ -476,6 +477,20 @@ def make_app(cfg, brain: Brain) -> web.Application:
     return app
 
 
+def addresses(host: str, port: int) -> list[str]:
+    """The addresses to type into a browser. 0.0.0.0 means "every network interface", which is
+    not itself an address a browser can open, so list this machine's name and LAN address instead."""
+    if host not in ("0.0.0.0", "::", ""):
+        return [f"http://{host}:{port}"]
+    urls = [f"http://127.0.0.1:{port}   (this machine)"]
+    name = socket.gethostname()
+    urls.append(f"http://{name if name.endswith('.local') else name + '.local'}:{port}   (other machines, by name)")
+    with contextlib.suppress(OSError), socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        s.connect(("10.255.255.255", 1))  # UDP connect sends nothing; it only picks the outgoing interface
+        urls.append(f"http://{s.getsockname()[0]}:{port}   (other machines, by IP)")
+    return urls
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Yo-gurt robot interface")
     parser.add_argument("machine", nargs="?", default="laptop", help="which config/hardware_<machine>.yaml to use")
@@ -488,8 +503,10 @@ def main() -> None:
     if args.sim:
         cfg.arm["port"] = "sim"
     brain = Brain(cfg, Arm(cfg), Mic(cfg), Camera("wrist", cfg.cameras.wrist), Camera("base", cfg.cameras.base))
-    print(f"\n  Yo-gurt ({args.machine}): http://{cfg.web.host}:{cfg.web.port}"
-          f"   user {cfg.web.user} / password {cfg.web.password}\n")
+    print(f"\n  Yo-gurt ({args.machine})   user {cfg.web.user} / password {cfg.web.password}")
+    for url in addresses(cfg.web.host, cfg.web.port):
+        print(f"    {url}")
+    print()
     web.run_app(make_app(cfg, brain), host=cfg.web.host, port=cfg.web.port, print=None)
 
 

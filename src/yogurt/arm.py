@@ -13,6 +13,7 @@ import asyncio
 import glob
 import json
 import logging
+import os
 import threading
 import time
 from pathlib import Path
@@ -42,7 +43,9 @@ def joint_limits(calibration: dict, margin_deg: float) -> dict[str, tuple[float,
 
 def find_port(exclude: str | None = None) -> str:
     patterns = ["/dev/tty.usbmodem*", "/dev/tty.usbserial*", "/dev/ttyACM*", "/dev/ttyUSB*"]
-    ports = sorted({p for pattern in patterns for p in glob.glob(pattern)} - {exclude})
+    # Resolve symlinks so a stable /dev/serial/by-id/... leader path still excludes its /dev/ttyACM* node.
+    skip = os.path.realpath(exclude) if exclude else None
+    ports = sorted(p for p in {p for pattern in patterns for p in glob.glob(pattern)} if os.path.realpath(p) != skip)
     if len(ports) == 1:
         return ports[0]
     if not ports:
