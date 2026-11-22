@@ -11,12 +11,12 @@ arm:
   # auto = the only USB serial adapter plugged in (after excluding leader.port).
   # sim  = no hardware: a simulated arm, so the UI and state machine can be tested anywhere.
   # Or an explicit path, e.g. /dev/tty.usbmodem5A460851011 (find it with `lerobot-find-port`).
-  port: auto
+  port: /dev/tty.usbmodem5B8E1153981   # follower (5B8E...); with the leader plugged in, auto cannot choose
   calibration: config/arm_config.json
 
 leader:
   # Leader arm, only needed to record grasp demonstrations. null = not attached.
-  port: null
+  port: /dev/tty.usbmodem59700722681  # leader (5970...)
   calibration: config/leader_config.json   # written by lerobot-calibrate, see data/grasp_act/README.md
 
 cameras:

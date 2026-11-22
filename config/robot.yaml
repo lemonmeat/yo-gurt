@@ -11,6 +11,7 @@ arm:
   max_lead_deg: 15        # the command may lead the measured position by at most this much
   tolerance_deg: 3        # "arrived" when every joint is this close
   max_temp_c: 62          # release torque if any servo gets this hot
+  max_temp_reads: 3       # ... on this many health reads in a row (one a second): one bad reading is not a fault
 
 # How the base camera (and its microphones) sit relative to the arm.
 base_camera:
@@ -49,7 +50,7 @@ grasp:
   fps: 30
   duration_s: 12          # how long the ACT policy runs before Verify
   closed_below: 35        # gripper % under which the hand counts as closed around the cup
-  image_width: 640        # wrist frames are resized to this for demos and for the policy
+  image_width: 640        # Lab demos record the wrist frame at this size (a trained policy uses its own)
   image_height: 360
 
 verify:

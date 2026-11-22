@@ -355,7 +355,7 @@ class Session:
             self.dataset.add_frame({
                 "observation.state": np.array([joints[j] for j in JOINTS], dtype=np.float32),
                 "action": np.array([action[j] for j in JOINTS], dtype=np.float32),
-                "observation.images.wrist": wrist_image(frame, self.cfg),
+                "observation.images.wrist": wrist_image(frame, self.cfg.grasp.image_width, self.cfg.grasp.image_height),
                 "task": self.settings["task"],
             })
 

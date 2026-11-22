@@ -2,6 +2,8 @@
 
 Input is exactly what the demonstrations recorded (the wrist picture and the six joint positions);
 output is the next joint target. The arm's own safety limits still apply to whatever comes out.
+The camera name and picture size come from the trained policy, so a policy trained on a dataset
+recorded outside the Lab (e.g. with `lerobot-record`, camera "Wrist" at 640x480) runs too.
 """
 
 from pathlib import Path
@@ -12,9 +14,18 @@ import numpy as np
 from .arm import JOINTS
 
 
-def wrist_image(frame: np.ndarray, cfg) -> np.ndarray:
-    """The wrist frame as demonstrations and the policy see it: RGB, resized to the configured size."""
-    small = cv2.resize(frame, (cfg.grasp.image_width, cfg.grasp.image_height), interpolation=cv2.INTER_AREA)
+def wrist_image(frame: np.ndarray, width: int, height: int) -> np.ndarray:
+    """The wrist frame as demonstrations and the policy see it: RGB at width x height. A frame of another
+    shape is centre-cropped to it first (a 16:9 frame for a 4:3 policy loses its sides, not its proportions),
+    as a camera asked for that shape would do."""
+    h, w = frame.shape[:2]
+    if w * height > h * width:      # too wide: trim the sides
+        keep = round(h * width / height)
+        frame = frame[:, (w - keep) // 2:(w - keep) // 2 + keep]
+    elif w * height < h * width:    # too tall: trim top and bottom
+        keep = round(w * height / width)
+        frame = frame[(h - keep) // 2:(h - keep) // 2 + keep]
+    small = cv2.resize(frame, (width, height), interpolation=cv2.INTER_AREA)
     return cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
 
 
@@ -32,6 +43,11 @@ class GraspPolicy:
             self.policy.config, pretrained_path=str(folder),
             preprocessor_overrides={"device_processor": {"device": self.device.type}},
         )
+        cameras = self.policy.config.image_features
+        if len(cameras) != 1:
+            raise ValueError(f"the grasp policy must take one camera (the wrist), not {list(cameras) or 'none'}")
+        (self.camera, feature), = cameras.items()   # e.g. "observation.images.wrist"
+        _, self.image_height, self.image_width = feature.shape   # channels first
 
     def reset(self) -> None:
         """Call before each grasp attempt: forget the previous attempt's planned actions."""
@@ -42,7 +58,7 @@ class GraspPolicy:
         from lerobot.common.control_utils import predict_action
 
         observation = {
-            "observation.images.wrist": wrist_image(frame, self.cfg),
+            self.camera: wrist_image(frame, self.image_width, self.image_height),
             "observation.state": np.array([joints[j] for j in JOINTS], dtype=np.float32),
         }
         action = predict_action(observation, self.policy, self.device, self.preprocess, self.postprocess,

@@ -9,16 +9,16 @@ idle:
   wrist_roll: 0.0
   gripper: 0.0
 survey:
-  shoulder_pan: 0.0
-  shoulder_lift: -60.0
-  elbow_flex: -5.0
-  wrist_flex: 80.0
-  wrist_roll: 0.0
-  gripper: 70.0
+  shoulder_pan: -0.3
+  shoulder_lift: -59.6
+  elbow_flex: -5.1
+  wrist_flex: 98.5
+  wrist_roll: -90.5
+  gripper: 35.2
 handoff:
-  shoulder_pan: 0.0
-  shoulder_lift: 50.0
-  elbow_flex: -85.0
-  wrist_flex: 35.0
-  wrist_roll: 0.0
-  gripper: 0.0
+  shoulder_pan: 69.8
+  shoulder_lift: -54.8
+  elbow_flex: 2.0
+  wrist_flex: 45.4
+  wrist_roll: -94.2
+  gripper: 0.6

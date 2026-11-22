@@ -278,6 +278,7 @@ class Arm:
     def _loop(self) -> None:
         period = 1.0 / self.settings.rate_hz
         failures, next_health = 0, 0.0
+        hot_reads = dict.fromkeys(JOINTS, 0)   # consecutive health reads at or over max_temp_c, per joint
         while self._running:
             started = time.monotonic()
             try:
@@ -289,6 +290,11 @@ class Arm:
                     if started >= next_health:
                         self.health = self.bus.read_health()
                         next_health = started + 1.0
+                        for j, h in self.health.items():
+                            hot_reads[j] = hot_reads[j] + 1 if h["temp_c"] >= self.settings.max_temp_c else 0
+                            if hot_reads[j] == 1:
+                                log.warning("%s reads %s°C; releasing the arm if it still does after %d reads",
+                                            j, h["temp_c"], self.settings.max_temp_reads)
                 failures = 0
             except Exception as e:
                 failures += 1
@@ -296,7 +302,9 @@ class Arm:
                 if failures >= 10:
                     threading.Thread(target=self.kill, args=(f"lost contact with the arm: {e}",)).start()
                     return
-            hot = [f"{j} {h['temp_c']}°C" for j, h in self.health.items() if h["temp_c"] >= self.settings.max_temp_c]
+            # A servo can misreport its temperature for a moment (e.g. 32 -> 150 °C as a move starts) while a
+            # real overheat builds over minutes, so only a reading that stays hot for max_temp_reads counts.
+            hot = [f"{j} {self.health[j]['temp_c']}°C" for j, n in hot_reads.items() if n >= self.settings.max_temp_reads]
             if hot:
                 threading.Thread(target=self.kill, args=(f"servo overheating: {', '.join(hot)}",)).start()
                 return
