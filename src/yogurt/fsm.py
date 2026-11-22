@@ -98,7 +98,7 @@ class Brain:
                 return None
             try:
                 model = build(file)
-                self.models[name] = "ready"
+                self.models[name] = "ready, on the AI HAT+ 2" if file.suffix == ".hef" else "ready"
                 return model
             except Exception as e:
                 log.exception("loading %s", name)

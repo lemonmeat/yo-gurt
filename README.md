@@ -102,7 +102,7 @@ The ready-made detector (`detector pretrained`) is COCO YOLO11s using its "cup" 
 found the yogurt in the brief's concept picture with a confidence between 0.3 and 0.7 depending on
 framing, and it will also fire on mugs. Treat it as a way to get started and train your own.
 
-## Raspberry Pi 5 + AI HAT+
+## Raspberry Pi 5 + AI HAT+ 2
 
 ```bash
 sudo apt install libportaudio2
@@ -113,25 +113,47 @@ git clone <this repo> && cd yo-gurt && uv sync
 uv run yogurt pi          # http://<pi-address>:8080 from the laptop, gurt / gurt
 ```
 
-`config/hardware_pi.yaml` listens on the local network and runs every model on the Pi's CPU, which
-needs nothing from the HAT. **I had no Pi or Hailo hardware, so nothing in this section has been run.**
+`config/hardware_pi.yaml` listens on the local network. The yogurt detector runs on the AI HAT+ 2
+(Hailo-10H); every other model runs on the Pi's CPU. A path ending in `.hef` is run through HailoRT
+([src/yogurt/infer.py](src/yogurt/infer.py), written from Hailo's reference `HailoInfer` example); put
+`models/yogurt_detector.onnx` back in `hardware_pi.yaml` to run the detector on the CPU instead.
+**Nothing in this section has been run on a Pi or a HAT yet.**
 
-To move a vision model onto the AI HAT+, compile it to a `.hef` with Hailo's Dataflow Compiler (x86
-Linux) and point the model path in `hardware_pi.yaml` at it; a path ending in `.hef` is run through
-HailoRT ([src/yogurt/infer.py](src/yogurt/infer.py), written from Hailo's reference `HailoInfer` example):
+**HailoRT on the Pi.** Raspberry Pi OS Trixie (64-bit), then:
 
-- **Detector**: the code expects a HEF with HailoRT's built-in NMS, which is what
-  `hailomz compile yolov11s --ckpt best.onnx --hw-arch hailo8 --calib-path data/yogurt_detection/images --classes 1`
-  produces (export `best.pt` with plain `yolo export format=onnx imgsz=640` first). The pre-compiled
-  COCO `yolov11s.hef` from the Hailo Model Zoo works for the ready-made detector. Keep
-  `models/yogurt_detector.json` next to the `.hef`: it holds the label names.
-- **Classifiers**: parse `grasp_verify.onnx` / `handoff_grab.onnx`, and add
-  `normalization([0.0, 0.0, 0.0], [255.0, 255.0, 255.0])` to the model script so the HEF takes 0–255 pixels.
-- HailoRT's Python package is installed for the system Python (`sudo apt install hailo-all`), so create
-  the environment from it: `uv venv --python /usr/bin/python3 --system-site-packages`. This project needs
-  Python 3.12 or newer.
-- The wake word, speech-to-text, language model and ACT policy stay on the CPU. (An AI HAT+ 2 can serve
-  the language model through `hailo-ollama`; set `slm.url` to it.)
+```bash
+sudo apt install dkms hailo-h10-all && sudo reboot   # not hailo-all: that is the original AI HAT+, and the two conflict
+hailortcli fw-control identify                       # should say "Device Architecture: HAILO10H"
+```
+
+HailoRT's Python package is installed for the system Python, so create the environment from it before
+`uv sync`: `uv venv --python /usr/bin/python3 --system-site-packages` (this project needs Python 3.12+).
+
+**Compiling the detector** needs a Linux x86_64 computer (not the Pi, not a Mac) with Hailo's Dataflow
+Compiler **5.x** wheel, the one for Hailo-10H (Hailo-8 uses 3.x; their HEFs are not interchangeable),
+from the [Hailo Developer Zone](https://hailo.ai/developer-zone/) (free account). On that computer, with
+this repo, `data/yogurt_detection/` and `outputs/yogurt_detector/run/weights/best.pt` copied over:
+
+```bash
+uv sync --extra train
+uv pip install hailo_dataflow_compiler-5.*.whl
+uv run --no-sync python -m yogurt.train.detector hailo     # --weights outputs/yolo11s.pt for the ready-made one
+```
+
+That uses Ultralytics' Hailo export to calibrate the INT8 model on your wrist pictures and compile it,
+with HailoRT's NMS on the chip, and writes `models/yogurt_detector.hef` and `.json` (the label names).
+Copy both into `models/` on the Pi and press **Reload models**. The "Models and hardware" panel then shows
+the detector as "ready, on the AI HAT+ 2". If the wheel will not install on this project's Python,
+make a plain venv with the Python version the wheel supports, `pip install ultralytics` and the wheel
+there, and run `yolo export model=best.pt format=hailo name=hailo10h imgsz=640 conf=0.1 data=<yaml>`,
+where `<yaml>` lists the calibration pictures (the `hailo` mode writes one to
+`outputs/yogurt_detector/calibration.yaml`).
+
+- **Classifiers** could follow the same route (`format=hailo` supports classification models), but they
+  are not YOLO models, so they would need Hailo's compiler directly. They are cheap on the CPU: leave them.
+- The wake word, speech-to-text, language model and ACT policy stay on the CPU. The HAT+ 2 can also
+  serve the language model through `hailo-ollama` (set `slm.url` to it, and start it with
+  `HAILO_OLLAMA_VDEVICE_GROUP_ID=SHARED` so it shares the chip with the detector).
 
 ## Files
 

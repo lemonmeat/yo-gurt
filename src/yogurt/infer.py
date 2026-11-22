@@ -1,4 +1,4 @@
-"""Run a vision model on whatever this computer has: .onnx on the CPU, .hef on the Hailo AI HAT+.
+"""Run a vision model on whatever this computer has: .onnx on the CPU, .hef on the Hailo AI HAT+ 2.
 
 Both kinds take the same thing - an RGB uint8 image already resized to the model's input - so the
 rest of the code does not care which one is loaded.
@@ -40,7 +40,7 @@ class HailoModel:
 
         params = VDevice.create_params()
         params.scheduling_algorithm = HailoSchedulingAlgorithm.ROUND_ROBIN  # lets several models share the chip
-        params.group_id = "SHARED"
+        params.group_id = "SHARED"   # also what hailo-ollama must be started with to share the chip (README)
         self.device = VDevice(params)
         self.model = self.device.create_infer_model(str(path))
         self.model.set_batch_size(1)
