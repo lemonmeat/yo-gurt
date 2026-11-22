@@ -377,7 +377,8 @@
       <div class="hint">Use <span class="mono">--policy.device=mps</span> on an Apple laptop or <span class="mono">cpu</span> anywhere, then copy
         <span class="mono">outputs/…/checkpoints/last/pretrained_model</span> to <span class="mono">models/act_grasp</span> (see data/grasp_act/README.md).</div>
       <div class="cleanbox" id="t-clean"><span id="t-clean-text"></span>
-        <button class="btn sm" id="t-export" hidden>Make cleaned copy</button></div>
+        <button class="btn sm" id="t-export" hidden>Make cleaned copy</button>
+        <button class="btn sm" id="t-upload" title="Push this dataset to the Hugging Face Hub">Upload to Hugging Face</button></div>
     </div>
   </div>
 </main>
@@ -587,6 +588,31 @@
     <div class="foot">
       <button class="btn cancel" data-close>Keep</button>
       <button class="btn solid-red" id="de-go">Delete</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="dlg-hub" hidden>
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="hf-title">
+    <h3 id="hf-title">Upload to Hugging Face</h3>
+    <p id="hf-text"></p>
+    <div id="hf-login" hidden>
+      <label class="f" for="hf-token">Access token</label>
+      <input type="password" id="hf-token" autocomplete="off" spellcheck="false" placeholder="hf_…">
+      <div class="hint">Create one with <b>Write</b> permission at huggingface.co/settings/tokens. It is saved on the robot
+        computer (~/.cache/huggingface/token) and never shown again.</div>
+      <div class="foot" style="margin-top:8px"><button class="btn" id="hf-login-go">Log in</button></div>
+    </div>
+    <div id="hf-form" hidden>
+      <label class="f" for="hf-repo">Hub dataset</label>
+      <input type="text" id="hf-repo" autocomplete="off" spellcheck="false">
+      <label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:13px">
+        <input type="checkbox" id="hf-private" checked> Private (only you and your organisation can see it)</label>
+    </div>
+    <div class="hint bad" id="hf-error"></div>
+    <div class="foot">
+      <button class="btn cancel" data-close>Close</button>
+      <button class="btn solid-red" id="hf-go" disabled>Upload</button>
     </div>
   </div>
 </div>
@@ -986,6 +1012,7 @@ function renderStats() {
 function keptRange(ep) { return ep.trim || [0, ep.length]; }
 function renderCleaning() {
   const ep = cur !== null ? D.episodes[cur] : null, c = D.cleaning, busy = !!(S && (S.session.open || S.session.starting));
+  $("t-upload").disabled = busy || !!D.problem;
   $("k-dis").textContent = ep && ep.disabled ? "Enable" : "Disable";
   $("k-dis").classList.toggle("on-red", !!(ep && ep.disabled));
   ["k-in", "k-out", "k-clear", "k-dis"].forEach(id => $(id).disabled = !ep || cleaningBusy || c.is_copy);
@@ -1035,7 +1062,6 @@ $("t-export").onclick = async () => {
   if (!D || cleaningBusy) return;
   const name = D.name;
   cleaningBusy = "export"; renderCleaning();
-  toast("Writing the cleaned copy…", "Every kept frame is decoded and re-encoded: several minutes for a large dataset (much longer on the Pi). Keep this page open.");
   try {
     const r = await post(`/api/lab/datasets/${enc(name)}/export-clean`);
     toast(`Wrote ${r.name}`, `${r.episodes} episodes, ${r.frames.toLocaleString()} frames. Its training command is on its page.`);
@@ -1224,6 +1250,47 @@ $("de-go").onclick = async () => {
     await loadDatasets();
   } catch (e) { toast("Episodes not deleted", e.message, true); }
   finally { delete d.dataset.busy; $("de-go").disabled = false; $("de-go").textContent = "Delete"; d.querySelector("[data-close]").disabled = false; closeDialog("dlg-delep"); }
+};
+
+// ---------------------------------------------------------------- upload to the Hugging Face Hub
+let HUB = null;
+const HUB_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,95}\/[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/;
+function renderHub() {
+  const busy = !!$("dlg-hub").dataset.busy;
+  $("hf-login").hidden = !HUB || HUB.logged_in;
+  $("hf-form").hidden = !HUB || !HUB.logged_in;
+  $("hf-text").innerHTML = !HUB ? '<span class="spin"></span> Checking the Hugging Face login…'
+    : HUB.logged_in ? `Logged in as <b style="color:#fff">${esc(HUB.user)}</b>. This pushes <span class="mono" style="color:#fff">${esc(D.name)}</span> (${D.total_episodes} episodes, ${D.size_mb} MB) as a LeRobot dataset.`
+      + (D.cleaning.edited && !D.cleaning.is_copy ? ` <span style="color:var(--orange4)">Trims and disabled takes are not applied to this one: upload its cleaned copy for that.</span>` : "")
+    : (HUB.problem ? esc(HUB.problem) + ". " : "") + "Log in once with an access token.";
+  $("hf-go").disabled = busy || !HUB || !HUB.logged_in || !HUB_RE.test($("hf-repo").value.trim());
+}
+$("t-upload").onclick = async () => {
+  if (!D) return;
+  HUB = null; $("hf-error").textContent = ""; $("hf-token").value = "";
+  openDialog("dlg-hub"); renderHub();
+  try { HUB = await get("/api/lab/hub"); } catch (e) { HUB = {logged_in:false}; $("hf-error").textContent = e.message; }
+  if (HUB.logged_in) $("hf-repo").value = `${HUB.user}/${D.name.replace(/_/g, "-")}`;
+  renderHub();
+};
+$("hf-repo").oninput = renderHub;
+$("hf-login-go").onclick = async () => {
+  $("hf-error").textContent = ""; $("hf-login-go").disabled = true;
+  try { HUB = await post("/api/lab/hub/login", {token:$("hf-token").value}); $("hf-token").value = "";
+        $("hf-repo").value = `${HUB.user}/${D.name.replace(/_/g, "-")}`; }
+  catch (e) { $("hf-error").textContent = e.message; }
+  finally { $("hf-login-go").disabled = false; renderHub(); }
+};
+$("hf-go").onclick = async () => {
+  const d = $("dlg-hub"), name = D.name, repo = $("hf-repo").value.trim();
+  d.dataset.busy = "1"; $("hf-go").textContent = "Uploading…"; $("hf-error").textContent = ""; renderHub();
+  try {
+    const r = await post(`/api/lab/datasets/${enc(name)}/upload`, {repo, private:$("hf-private").checked});
+    toast(`Uploaded ${name}`, r.url);
+    $("hf-text").innerHTML = `Uploaded to <a href="${esc(r.url)}" target="_blank" rel="noopener" style="color:var(--orange4)">${esc(r.url)}</a>.`;
+    $("hf-form").hidden = true;
+  } catch (e) { $("hf-error").textContent = e.message; }
+  finally { delete d.dataset.busy; $("hf-go").textContent = "Upload"; $("hf-go").disabled = true; }
 };
 
 $("b-deldata").onclick = () => {

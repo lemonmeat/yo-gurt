@@ -178,33 +178,38 @@ def set_cleaning(name: str, index: int, disabled=None, trim="keep") -> dict:
     return edits[index]
 
 
-def _read_frames(file: Path, first: int, count: int, fps: int) -> list[np.ndarray]:
-    """Frames first .. first+count-1 of a video, as H,W,3 uint8 RGB. PyAV (FFmpeg) rather than torchcodec:
-    PyPI's torchcodec for Linux ARM is a CUDA build that will not load on the Pi."""
-    import av
+def _link_or_copy(src: Path, dst: Path) -> None:
+    """A hard link shares the bytes (instant, no extra disk). Deleting episodes from the source later
+    writes new files and swaps folders, so a linked file is never changed under the copy."""
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        dst.hardlink_to(src)
+    except OSError:
+        shutil.copy2(src, dst)
 
-    out: list[np.ndarray] = []
-    with av.open(str(file)) as container:
-        stream = container.streams.video[0]
-        # jump to the keyframe before the first frame wanted, then decode forward
-        container.seek(int(first / fps / stream.time_base), stream=stream, backward=True, any_frame=False)
-        for picture in container.decode(stream):
-            index = round(picture.time * fps)
-            if index < first:
-                continue
-            if index >= first + count:
-                break
-            out.append(picture.to_ndarray(format="rgb24"))
-    if len(out) != count:
-        raise RuntimeError(f"{file.name}: expected {count} frames from frame {first}, decoded {len(out)}")
-    return out
+
+def _dense(value) -> np.ndarray:
+    """Parquet hands nested lists back as arrays of arrays; LeRobot wants one (e.g. 3,1,1) array."""
+    if isinstance(value, np.ndarray) and value.dtype == object:
+        return np.stack([_dense(v) for v in value])
+    return np.asarray(value)
 
 
 def export_clean(name: str) -> dict:
-    """Write <name>-clean: the enabled episodes, each cut to its trim, as a normal LeRobot dataset.
-    Built in a staging folder and swapped in at the end, so an earlier copy survives a failure."""
+    """Write <name>-clean: the enabled episodes, each cut to its trim, as a normal LeRobot v3 dataset.
+
+    No video is decoded or re-encoded. In a v3 dataset every episode is a time window into a shared
+    video file, so the copy links the original video files and only writes new frame rows and episode
+    windows: disabled takes are left out, a trim moves the window's start and end. Seconds even on the
+    Pi, and the frames are exactly the recorded ones. Joint statistics (used to normalise training) are
+    recomputed from the kept frames; picture statistics are taken from the original episodes.
+    Built in a staging folder and swapped in at the end, so an earlier copy survives a failure.
+    """
+    import pandas as pd
+    import pyarrow as pa
     import pyarrow.parquet as pq
-    from lerobot.datasets import LeRobotDataset
+    from lerobot.datasets.compute_stats import aggregate_stats, compute_episode_stats
+    from lerobot.datasets.io_utils import flatten_dict, write_stats
 
     path = dataset_dir(name)
     info = _info(path)
@@ -212,58 +217,146 @@ def export_clean(name: str) -> dict:
         raise RuntimeError(problem)
     if name.endswith(CLEAN_SUFFIX):
         raise ValueError("this is already a cleaned copy: clean the original dataset instead")
-    edits, marks = cleaning(path), perturbed(path)
-    episodes = [e for e in _episodes(path, info) if not edits.get(e["index"], {}).get("disabled")]
-    if not episodes:
+    edits, marks, fps = cleaning(path), perturbed(path), info["fps"]
+    rows_by_index = {e["index"]: e for e in _episodes(path, info)}
+    kept = [i for i in sorted(rows_by_index) if not edits.get(i, {}).get("disabled")]
+    if not kept:
         raise ValueError("every episode is disabled: nothing to export")
+    cams = [CAMERA + c for c in _cameras(info)]
+    numeric = {k: f for k, f in info["features"].items() if f["dtype"] not in ("video", "image", "string")}
+
+    episode_meta = pd.concat([pq.read_table(f).to_pandas()
+                              for f in sorted((path / "meta" / "episodes").glob("chunk-*/file-*.parquet"))])
+    episode_meta = episode_meta.set_index("episode_index", drop=False)
+    data_files = sorted((path / "data").glob("chunk-*/file-*.parquet"))
+    schema = pq.read_schema(data_files[0])
+    frames = pd.concat([pq.read_table(f).to_pandas() for f in data_files])
+    frames = frames[frames["episode_index"].isin(kept)].sort_values(["episode_index", "frame_index"])
+
     target_name = clean_name(name)
     target = root() / target_name
-    cams = _cameras(info)
-    builtin = {"timestamp", "frame_index", "episode_index", "index", "task_index"}
-    feats = {k: v for k, v in info["features"].items() if k not in builtin}
     staging = Path(tempfile.mkdtemp(prefix=f".{target_name}.export-", dir=root()))
-    out_dir = staging / "new"
+    out = staging / "new"
     try:
-        out = LeRobotDataset.create(repo_id(target_name), info["fps"], features=feats, root=out_dir,
-                                    robot_type=info.get("robot_type"), use_videos=True, image_writer_threads=4)
-        tables, new_marks, frames = {}, [], 0
-        for e in episodes:
-            key = tuple(e["data"])
-            if key not in tables:
-                file = path / info["data_path"].format(chunk_index=key[0], file_index=key[1])
-                tables[key] = pq.read_table(file).to_pandas()
-            rows = tables[key][tables[key]["episode_index"] == e["index"]].sort_values("frame_index")
-            start, end = _kept_range(edits.get(e["index"]), e["length"])
-            pictures = {}
+        new_rows, new_meta, all_stats, total = [], [], [], 0
+        for new_index, old_index in enumerate(kept):
+            length = rows_by_index[old_index]["length"]
+            start, end = _kept_range(edits.get(old_index), length)
+            part = frames[frames["episode_index"] == old_index].iloc[start:end].copy()
+            n = len(part)
+            part["episode_index"] = new_index
+            part["frame_index"] = np.arange(n)
+            part["timestamp"] = (np.arange(n) / fps).astype(np.float32)
+            part["index"] = np.arange(total, total + n)
+            new_rows.append(part)
+
+            stats = compute_episode_stats(
+                {k: np.stack(part[k].to_numpy()) if numeric[k]["shape"] != [1] else part[k].to_numpy()
+                 for k in numeric}, numeric)
+            old = episode_meta.loc[old_index]
+            for cam in cams:  # picture statistics: the original episode's (close enough for normalising)
+                stats[cam] = {k.split("/")[-1]: _dense(old[k])
+                              for k in episode_meta.columns if k.startswith(f"stats/{cam}/")}
+            all_stats.append(stats)
+
+            meta = {"episode_index": new_index, "tasks": list(old["tasks"]), "length": n,
+                    "data/chunk_index": 0, "data/file_index": 0,
+                    "dataset_from_index": total, "dataset_to_index": total + n,
+                    "meta/episodes/chunk_index": 0, "meta/episodes/file_index": 0}
             for cam in cams:
-                v = e["videos"][cam]
-                first = round(v["from"] * info["fps"])
-                pictures[cam] = _read_frames(video_file(name, cam, v["chunk"], v["file"]), first + start,
-                                             end - start, info["fps"])
-            task = (e["tasks"] or [""])[0]
-            for k, (_, row) in enumerate(rows.iloc[start:end].iterrows()):
-                frame = {key: np.asarray(row[key], dtype=np.float32) for key in feats
-                         if not key.startswith(CAMERA)}
-                frame.update({CAMERA + cam: pictures[cam][k] for cam in cams})
-                out.add_frame({**frame, "task": task})
-                frames += 1
-            out.save_episode()
-            if e["index"] in marks:
-                new_marks.append(out.meta.total_episodes - 1)
-        out.finalize()
+                begin = float(old[f"videos/{cam}/from_timestamp"])
+                meta.update({f"videos/{cam}/chunk_index": int(old[f"videos/{cam}/chunk_index"]),
+                             f"videos/{cam}/file_index": int(old[f"videos/{cam}/file_index"]),
+                             f"videos/{cam}/from_timestamp": begin + start / fps,
+                             f"videos/{cam}/to_timestamp": begin + end / fps})
+            meta.update({f"stats/{k}": (v.tolist() if isinstance(v, np.ndarray) else v)
+                         for k, v in flatten_dict(stats).items()})
+            new_meta.append(meta)
+            total += n
+
+        data_file = out / info["data_path"].format(chunk_index=0, file_index=0)
+        data_file.parent.mkdir(parents=True)
+        pq.write_table(pa.Table.from_pandas(pd.concat(new_rows), schema=schema, preserve_index=False), data_file)
+
+        meta_file = out / "meta" / "episodes" / "chunk-000" / "file-000.parquet"
+        meta_file.parent.mkdir(parents=True)
+        meta_table = pd.DataFrame(new_meta)[[c for c in episode_meta.columns]]
+        pq.write_table(pa.Table.from_pandas(meta_table, preserve_index=False), meta_file)
+
+        for video in (path / "videos").rglob("*.mp4"):
+            _link_or_copy(video, out / video.relative_to(path))
+        shutil.copy2(path / "meta" / "tasks.parquet", out / "meta" / "tasks.parquet")
+        write_stats(aggregate_stats(all_stats), out)
+        (out / "meta" / "info.json").write_text(json.dumps(
+            {**info, "total_episodes": len(kept), "total_frames": total, "splits": {"train": f"0:{len(kept)}"}},
+            indent=4))
+
+        new_marks = [new for new, old in enumerate(kept) if old in marks]
         if new_marks:
-            _write_perturbed(out_dir, new_marks)
-        (out_dir / "SOURCE.json").write_text(json.dumps(
-            {"source": name, "episodes": [e["index"] for e in episodes],
-             "trims": {str(i): edits[i]["trim"] for i in edits if edits[i].get("trim")}}, indent=1))
+            _write_perturbed(out, new_marks)
+        (out / "SOURCE.json").write_text(json.dumps(
+            {"source": name, "episodes": kept,
+             "trims": {str(i): edits[i]["trim"] for i in kept if edits.get(i, {}).get("trim")}}, indent=1))
         if target.exists():
             target.rename(staging / "old")
-        out_dir.rename(target)
+        out.rename(target)
     finally:
         shutil.rmtree(staging, ignore_errors=True)
-    log.info("exported %s: %d episodes, %d frames", target_name, len(episodes), frames)
-    return {"name": target_name, "episodes": len(episodes), "frames": frames,
-            "train_command": train_command(target_name)}
+    log.info("exported %s: %d episodes, %d frames", target_name, len(kept), total)
+    return {"name": target_name, "episodes": len(kept), "frames": total, "train_command": train_command(target_name)}
+
+
+# ---- Hugging Face Hub -------------------------------------------------------------------------
+# The token is kept where huggingface_hub always keeps it (~/.cache/huggingface/token on the robot
+# computer, or HF_TOKEN), so `hf auth login` in a terminal and the Lab's form share one login.
+HUB_REPO = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,95}/[A-Za-z0-9][A-Za-z0-9._-]{0,95}")
+
+
+def hub_status() -> dict:
+    import huggingface_hub as hub
+
+    if not hub.get_token():
+        return {"logged_in": False, "user": None}
+    try:
+        return {"logged_in": True, "user": hub.whoami()["name"]}
+    except Exception:
+        return {"logged_in": False, "user": None, "problem": "the saved Hugging Face token was refused or the Hub "
+                                                             "could not be reached"}
+
+
+def hub_login(token) -> dict:
+    import huggingface_hub as hub
+
+    if not isinstance(token, str) or not token.strip().startswith("hf_"):
+        raise ValueError("paste a Hugging Face access token (it starts with hf_) with write permission")
+    token = token.strip()
+    try:
+        user = hub.whoami(token=token)["name"]
+    except Exception:
+        raise ValueError("Hugging Face did not accept that token") from None  # never echo the token
+    hub.login(token=token, add_to_git_credential=False, skip_if_logged_in=False)
+    log.info("logged in to Hugging Face as %s", user)
+    return {"logged_in": True, "user": user}
+
+
+def upload(name: str, repo: str, private: bool) -> dict:
+    """Push one dataset (an original or a -clean copy) to the Hub as a LeRobot dataset."""
+    from lerobot.datasets import LeRobotDataset
+
+    path = dataset_dir(name)
+    info = _info(path)
+    if problem := _problem(path, info):
+        raise RuntimeError(problem)
+    if not isinstance(repo, str) or not HUB_REPO.fullmatch(repo):
+        raise ValueError("the Hub repository is <user or organisation>/<name>, e.g. alice/yogurt-grasp")
+    if not isinstance(private, bool):
+        raise ValueError("private must be true or false")
+    if not hub_status()["logged_in"]:
+        raise RuntimeError("log in to Hugging Face first")
+    dataset = LeRobotDataset(repo, root=path)
+    dataset.push_to_hub(private=private, tags=["yo-gurt", "so101", "LeRobot"], upload_large_folder=False)
+    log.info("uploaded %s to https://huggingface.co/datasets/%s", name, repo)
+    return {"repo": repo, "url": f"https://huggingface.co/datasets/{repo}"}
 
 
 def _size_mb(path: Path) -> float:

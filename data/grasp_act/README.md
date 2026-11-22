@@ -106,8 +106,17 @@ These edits are stored on the robot computer in `data/grasp_act/<name>/cleaning.
 the recording, and are never applied to it, so they can all be undone. `lerobot-train` cannot read
 them, so press **Make cleaned copy** (under the training command): it writes `<name>-clean`, a normal
 dataset with the disabled takes left out and the trims applied. Train on that copy. The Lab says
-when the copy is out of date because you edited (or recorded) more since. Making the copy re-encodes
-every kept frame: about 5 minutes for 20k frames on a laptop, much longer on the Pi.
+when the copy is out of date because you edited (or recorded) more since. Making the
+copy takes seconds: it links the original video files (no extra disk space, nothing re-encoded) and
+writes only new frame rows, so a trim just moves where each episode starts and ends in the video.
+
+## Upload to Hugging Face (the Lab)
+
+**Upload to Hugging Face** (under the training command) pushes the dataset on screen to the Hub as a
+LeRobot dataset, private by default. The first time, paste an access token with Write permission
+(huggingface.co/settings/tokens). It is saved on the robot computer like `hf auth login` would
+(`~/.cache/huggingface/token`). Upload the `-clean` copy to share the cleaned version. It carries
+the original video files whole, so footage from disabled takes is in them, but not in the index.
 
 ## Train
 

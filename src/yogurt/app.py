@@ -400,7 +400,7 @@ def make_app(cfg, brain: Brain) -> web.Application:
         """Run one dataset change at a time, never on the dataset a session is recording into."""
         lab.check_name(name)
         if brain.session.busy:
-            raise RuntimeError("a recording session is running: stop it before deleting anything")
+            raise RuntimeError("a recording session is running: stop it before changing or uploading a dataset")
         if not lab.LOCK.acquire(blocking=False):
             raise RuntimeError("another dataset change is still in progress")
         try:
@@ -438,6 +438,21 @@ def make_app(cfg, brain: Brain) -> web.Application:
         name = request.match_info["name"]
         result = await rewrite(name, lab.export_clean)
         brain.say(f"Lab: wrote {result['name']} from {name} ({result['episodes']} episodes, {result['frames']} frames)")
+        return web.json_response({"ok": True, **result})
+
+    @routes.get("/api/lab/hub")
+    async def lab_hub(request):
+        return web.json_response(await asyncio.to_thread(lab.hub_status))
+
+    @routes.post("/api/lab/hub/login")
+    async def lab_hub_login(request):
+        return web.json_response(await asyncio.to_thread(lab.hub_login, (await request.json()).get("token")))
+
+    @routes.post("/api/lab/datasets/{name}/upload")
+    async def lab_upload(request):
+        name, body = request.match_info["name"], await request.json()
+        result = await rewrite(name, lab.upload, body.get("repo"), body.get("private", True))
+        brain.say(f"Lab: uploaded {name} to {result['url']}")
         return web.json_response({"ok": True, **result})
 
     @routes.post("/api/lab/datasets/{name}/delete")
