@@ -178,12 +178,33 @@ def set_cleaning(name: str, index: int, disabled=None, trim="keep") -> dict:
     return edits[index]
 
 
+def _read_frames(file: Path, first: int, count: int, fps: int) -> list[np.ndarray]:
+    """Frames first .. first+count-1 of a video, as H,W,3 uint8 RGB. PyAV (FFmpeg) rather than torchcodec:
+    PyPI's torchcodec for Linux ARM is a CUDA build that will not load on the Pi."""
+    import av
+
+    out: list[np.ndarray] = []
+    with av.open(str(file)) as container:
+        stream = container.streams.video[0]
+        # jump to the keyframe before the first frame wanted, then decode forward
+        container.seek(int(first / fps / stream.time_base), stream=stream, backward=True, any_frame=False)
+        for picture in container.decode(stream):
+            index = round(picture.time * fps)
+            if index < first:
+                continue
+            if index >= first + count:
+                break
+            out.append(picture.to_ndarray(format="rgb24"))
+    if len(out) != count:
+        raise RuntimeError(f"{file.name}: expected {count} frames from frame {first}, decoded {len(out)}")
+    return out
+
+
 def export_clean(name: str) -> dict:
     """Write <name>-clean: the enabled episodes, each cut to its trim, as a normal LeRobot dataset.
     Built in a staging folder and swapped in at the end, so an earlier copy survives a failure."""
     import pyarrow.parquet as pq
     from lerobot.datasets import LeRobotDataset
-    from torchcodec.decoders import VideoDecoder
 
     path = dataset_dir(name)
     info = _info(path)
@@ -205,7 +226,7 @@ def export_clean(name: str) -> dict:
     try:
         out = LeRobotDataset.create(repo_id(target_name), info["fps"], features=feats, root=out_dir,
                                     robot_type=info.get("robot_type"), use_videos=True, image_writer_threads=4)
-        tables, decoders, new_marks, frames = {}, {}, [], 0
+        tables, new_marks, frames = {}, [], 0
         for e in episodes:
             key = tuple(e["data"])
             if key not in tables:
@@ -216,12 +237,9 @@ def export_clean(name: str) -> dict:
             pictures = {}
             for cam in cams:
                 v = e["videos"][cam]
-                vkey = (cam, v["chunk"], v["file"])
-                if vkey not in decoders:
-                    decoders[vkey] = VideoDecoder(str(video_file(name, cam, v["chunk"], v["file"])))
                 first = round(v["from"] * info["fps"])
-                batch = decoders[vkey].get_frames_at(list(range(first + start, first + end)))
-                pictures[cam] = batch.data.permute(0, 2, 3, 1).numpy()  # N,H,W,C uint8
+                pictures[cam] = _read_frames(video_file(name, cam, v["chunk"], v["file"]), first + start,
+                                             end - start, info["fps"])
             task = (e["tasks"] or [""])[0]
             for k, (_, row) in enumerate(rows.iloc[start:end].iterrows()):
                 frame = {key: np.asarray(row[key], dtype=np.float32) for key in feats
