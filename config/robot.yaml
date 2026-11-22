@@ -48,7 +48,7 @@ check:
 grasp:
   task: Grab the yogurt cup.   # task string stored with the demonstrations
   fps: 30
-  duration_s: 12          # how long the ACT policy runs before Verify
+  duration_s: 20          # how long the ACT policy runs before Verify
   closed_below: 35        # gripper % under which the hand counts as closed around the cup
   image_width: 640        # Lab demos record the wrist frame at this size (a trained policy uses its own)
   image_height: 360
@@ -58,8 +58,8 @@ verify:
   window_s: 1.0           # averaged over this long
 
 handoff:
-  timeout_s: 10           # nobody takes it -> put it back
-  threshold: 0.7          # P(grabbed) needed ...
+  timeout_s: 15           # nobody takes it -> put it back
+  threshold: 0.6          # P(grabbed) needed ...
   hold_s: 0.4             # ... for this long before letting go
   release_wait_s: 1.5     # keep still after opening, so the cup is clear before retracting
   max_face_shift_deg: 30  # a face this close to the remembered bearing is the same person

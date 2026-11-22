@@ -1,4 +1,4 @@
-# Hardware as seen from the Raspberry Pi 5 + AI HAT+.  Run with:  uv run yogurt pi
+# Hardware as seen from the Raspberry Pi 5 + AI HAT+ 2.  Run with:  uv run yogurt pi
 # Then open http://<pi-address>:8080 from the laptop (user gurt, password gurt).
 # Everything that is the same on every computer (poses, timings, thresholds) lives in robot.yaml.
 
@@ -39,11 +39,11 @@ mic:
   device: UC60
   sample_rate: 48000
 
-# .onnx runs on the Pi's CPU; swap a path for its compiled .hef to run that model on the AI HAT+
-# (see README, "Running models on the AI HAT+").
+# .onnx runs on the Pi's CPU, .hef on the AI HAT+ 2 (see README, "Raspberry Pi 5 + AI HAT+ 2").
+# A model whose file is missing is reported as not loaded; its state's step-through button still works.
 models:
   wake_word: models/wake_word.onnx        # tiny, runs every 100 ms: keep on the CPU
-  yogurt_detector: models/yogurt_detector.onnx
+  yogurt_detector: models/yogurt_detector.hef   # `detector hailo` on an x86 Linux box makes it
   grasp_verify: models/grasp_verify.onnx
   handoff_grab: models/handoff_grab.onnx
   act_grasp: models/act_grasp

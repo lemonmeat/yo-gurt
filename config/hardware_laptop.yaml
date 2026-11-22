@@ -42,7 +42,7 @@ mic:
   sample_rate: 48000
 
 # Where each model runs. A model path ending in .onnx runs on the CPU (onnxruntime);
-# a path ending in .hef runs on the Hailo AI HAT+.
+# a path ending in .hef runs on the Hailo AI HAT+ 2 (Pi only).
 models:
   wake_word: models/wake_word.onnx
   yogurt_detector: models/yogurt_detector.onnx
