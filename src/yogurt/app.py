@@ -368,7 +368,8 @@ def make_app(cfg, brain: Brain) -> web.Application:
         return web.json_response({
             "datasets": await asyncio.to_thread(lab.list_datasets, recording()),
             "defaults": {"task": cfg.grasp.task, "fps": cfg.grasp.fps,
-                         "image": [cfg.grasp.image_width, cfg.grasp.image_height]},
+                         "image": [cfg.grasp.image_width, cfg.grasp.image_height],
+                         "dart_percent": round(cfg.dart.fraction * 100)},
             "name_rule": lab.NAME_RULE, "leader": cfg.leader.port, "detector": brain.detector is not None,
         })
 
@@ -415,6 +416,29 @@ def make_app(cfg, brain: Brain) -> web.Application:
         left = await rewrite(name, lab.delete_episodes, episodes)
         brain.say(f"Lab: deleted episode(s) {sorted(set(episodes))} from {name}; {left} left")
         return web.json_response({"ok": True, "remaining": left})
+
+    @routes.post("/api/lab/datasets/{name}/episodes/{index:\\d+}/cleaning")
+    async def lab_cleaning(request):
+        """Disable/enable an episode or set its trim. Stored beside the recording, never applied to it."""
+        name, index, body = request.match_info["name"], int(request.match_info["index"]), await request.json()
+        not_recording(name)
+        args = {"disabled": body.get("disabled")}
+        if "trim" in body:
+            args["trim"] = body["trim"]
+        if not lab.LOCK.acquire(blocking=False):  # never block the server behind a long export
+            raise RuntimeError("a dataset change is in progress: try again when it has finished")
+        try:
+            edit = await asyncio.to_thread(lab.set_cleaning, name, index, **args)
+        finally:
+            lab.LOCK.release()
+        return web.json_response({"ok": True, "episode": index, **edit})
+
+    @routes.post("/api/lab/datasets/{name}/export-clean")
+    async def lab_export_clean(request):
+        name = request.match_info["name"]
+        result = await rewrite(name, lab.export_clean)
+        brain.say(f"Lab: wrote {result['name']} from {name} ({result['episodes']} episodes, {result['frames']} frames)")
+        return web.json_response({"ok": True, **result})
 
     @routes.post("/api/lab/datasets/{name}/delete")
     async def lab_delete_dataset(request):

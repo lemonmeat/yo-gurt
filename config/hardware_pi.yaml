@@ -36,7 +36,7 @@ cameras:
     hfov_deg: 80
 
 mic:
-  device: UC60
+  device: alsa_input.usb-DSJ_UC60   # the PipeWire source; plain "UC60" also matches the raw ALSA device
   sample_rate: 48000
 
 # .onnx runs on the Pi's CPU, .hef on the AI HAT+ 2 (see README, "Raspberry Pi 5 + AI HAT+ 2").

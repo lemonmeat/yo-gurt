@@ -90,6 +90,16 @@
   .ep.on .n { color:var(--orange4); font-weight:600; }
   .ep .t { flex:1; min-width:0; font-size:12px; color:var(--g300); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .ep .d { font-size:11px; color:var(--g500); font-variant-numeric:tabular-nums; }
+  .ep.off .t, .ep.off .d, .ep.off .n { text-decoration:line-through; opacity:.45; }
+  .bdg { font-size:10px; line-height:16px; padding:0 5px; border-radius:4px; border:1px solid var(--g700, #374151); color:var(--g400); white-space:nowrap; }
+  .bdg.off { border-color:rgba(239,68,68,.5); color:var(--red4); }
+  .bdg.trim { border-color:rgba(249,115,22,.5); color:var(--orange4); }
+  .clean { display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding:6px 0 0; font-size:12px; }
+  .clean .dim { margin-right:4px; }
+  .btn.on-red { border-color:var(--red); color:var(--red3); background:rgba(239,68,68,.12); }
+  #c-trim { position:relative; height:6px; border-radius:3px; background:var(--g900); margin:2px 0 6px; overflow:hidden; }
+  #c-trim i { position:absolute; top:0; bottom:0; background:var(--orange); opacity:.7; }
+  .cleanbox { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:10px; font-size:13px; }
 
   /* episode viewer */
   .vhead { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:12px 16px; border-bottom:1px solid var(--g800); }
@@ -347,6 +357,15 @@
           <span class="mono dim" id="c-frame" style="font-size:12px;min-width:150px;text-align:right"></span>
           <button class="btn sm rate" data-rate="0.5">0.5×</button><button class="btn sm rate on" data-rate="1">1×</button><button class="btn sm rate" data-rate="2">2×</button>
         </div>
+        <div id="c-trim" title="The part of this take that is kept"><i></i></div>
+        <div class="clean">
+          <span class="dim">Clean this take:</span>
+          <button class="btn sm" id="k-in" title="Start the kept part at this frame ([)">[ Trim start here</button>
+          <button class="btn sm" id="k-out" title="End the kept part after this frame (])">Trim end here ]</button>
+          <button class="btn sm ghost" id="k-clear" title="Keep the whole take">Keep whole take</button>
+          <div class="grow"></div>
+          <button class="btn sm" id="k-dis" title="Leave this take out of training (D)">Disable</button>
+        </div>
         <div class="jtitle">Joints — what the leader arm commanded (the policy's training target). Hover to read, click to jump.</div>
         <div id="joints"></div>
       </div>
@@ -357,6 +376,8 @@
       <code class="mono" id="t-cmd"></code>
       <div class="hint">Use <span class="mono">--policy.device=mps</span> on an Apple laptop or <span class="mono">cpu</span> anywhere, then copy
         <span class="mono">outputs/…/checkpoints/last/pretrained_model</span> to <span class="mono">models/act_grasp</span> (see data/grasp_act/README.md).</div>
+      <div class="cleanbox" id="t-clean"><span id="t-clean-text"></span>
+        <button class="btn sm" id="t-export" hidden>Make cleaned copy</button></div>
     </div>
   </div>
 </main>
@@ -547,6 +568,10 @@
     </div>
     <div class="hint">End each episode yourself before its time runs out, or it is discarded and recorded again.
       Reset 0 = wait until you press Start Next Episode.</div>
+    <label class="f" for="f-dart">Perturbed takes (%)</label>
+    <input type="number" id="f-dart" min="0" max="100" step="1">
+    <div class="hint">DART: in this share of takes the follower drifts slightly off the leader (smooth noise, gripper untouched)
+      and the dataset keeps your clean leader motion as the action. Steer it back as you would by eye; the policy learns to recover. 0 = off.</div>
     <div class="hint bad" id="f-error"></div>
     <div class="foot">
       <button class="btn cancel" data-close>Cancel</button>
@@ -848,13 +873,15 @@ function openRecord(target) {
   $("f-n").value = saved.num_episodes || 10;
   $("f-ep").value = saved.episode_time_s || 20;
   $("f-reset").value = saved.reset_time_s ?? 15;
+  $("f-dart").value = saved.dart_percent ?? LIST.defaults.dart_percent ?? 50;
   $("f-error").textContent = "";
   checkForm();
   openDialog("dlg-record");
 }
 function formValues() {
   return {dataset: appendTo ? appendTo.name : $("f-name").value.trim(), new: !appendTo, task: $("f-task").value.trim(),
-          num_episodes: Number($("f-n").value), episode_time_s: Number($("f-ep").value), reset_time_s: Number($("f-reset").value)};
+          num_episodes: Number($("f-n").value), episode_time_s: Number($("f-ep").value), reset_time_s: Number($("f-reset").value),
+          dart_percent: Number($("f-dart").value)};
 }
 function checkForm() {
   const v = formValues(), problems = blockers();
@@ -865,17 +892,17 @@ function checkForm() {
   $("f-name-hint").textContent = nameHint;
   $("f-name-hint").className = "hint" + (bad ? " bad" : "");
   const whole = (x, lo, hi) => Number.isInteger(x) && x >= lo && x <= hi;
-  const numbersOk = whole(v.num_episodes, 1, 200) && whole(v.episode_time_s, 3, 600) && whole(v.reset_time_s, 0, 600);
-  $("f-error").textContent = numbersOk ? "" : "Episodes 1–200, episode time 3–600 s, reset time 0–600 s, whole numbers.";
+  const numbersOk = whole(v.num_episodes, 1, 200) && whole(v.episode_time_s, 3, 600) && whole(v.reset_time_s, 0, 600) && whole(v.dart_percent, 0, 100);
+  $("f-error").textContent = numbersOk ? "" : "Episodes 1–200, episode time 3–600 s, reset time 0–600 s, perturbed 0–100 %, whole numbers.";
   const notes = problems.map(p => `<div class="warnbox">${esc(p)}</div>`);
   if (!LIST.detector) notes.push(`<div class="warnbox">No yogurt detector yet, so the robot cannot find the cup itself: before each episode, put the cup in the middle of the wrist picture and press <b>Cup is centred</b>.</div>`);
   $("f-alerts").innerHTML = notes.join("");
   $("f-start").disabled = bad || !numbersOk || problems.length > 0 || !v.task;
 }
-["f-name", "f-task", "f-n", "f-ep", "f-reset"].forEach(id => $(id).addEventListener("input", checkForm));
+["f-name", "f-task", "f-n", "f-ep", "f-reset", "f-dart"].forEach(id => $(id).addEventListener("input", checkForm));
 $("f-start").onclick = async () => {
   const v = formValues(), d = $("dlg-record");
-  localStorage.setItem(FORM_KEY, JSON.stringify({task:v.task, num_episodes:v.num_episodes, episode_time_s:v.episode_time_s, reset_time_s:v.reset_time_s}));
+  localStorage.setItem(FORM_KEY, JSON.stringify({task:v.task, num_episodes:v.num_episodes, episode_time_s:v.episode_time_s, reset_time_s:v.reset_time_s, dart_percent:v.dart_percent}));
   try { audio = audio || new AudioContext(); } catch {}  // unlock sound with this click
   d.dataset.busy = "1"; $("f-start").disabled = true; $("f-start").lastChild.textContent = "Starting…";
   try { await post("/api/lab/record", v); delete d.dataset.busy; closeDialog("dlg-record"); }
@@ -950,7 +977,74 @@ function renderStats() {
     + stat("Robot", D.robot_type || "—") + stat("Cameras", D.cameras.join(", ") || "—") + stat("On disk", `${D.size_mb} MB`)
     + stat("Folder", D.path) + (ep ? stat("This episode", secs(ep.duration_s)) : "");
   $("t-cmd").textContent = D.train_command;
+  renderCleaning();
 }
+
+// ---------------------------------------------------------------- cleaning: trims and disabled takes
+// Stored on the server beside the recording (cleaning.json) and never applied to it, so it can always
+// be undone. "Make cleaned copy" writes <name>-clean with the edits applied: that is what you train on.
+function keptRange(ep) { return ep.trim || [0, ep.length]; }
+function renderCleaning() {
+  const ep = cur !== null ? D.episodes[cur] : null, c = D.cleaning, busy = !!(S && (S.session.open || S.session.starting));
+  $("k-dis").textContent = ep && ep.disabled ? "Enable" : "Disable";
+  $("k-dis").classList.toggle("on-red", !!(ep && ep.disabled));
+  ["k-in", "k-out", "k-clear", "k-dis"].forEach(id => $(id).disabled = !ep || cleaningBusy || c.is_copy);
+  $("k-clear").disabled ||= !(ep && ep.trim);
+  if (ep) { const [a, b] = keptRange(ep), bar = $("c-trim").firstElementChild;
+    bar.style.left = (a / ep.length * 100) + "%"; bar.style.width = ((b - a) / ep.length * 100) + "%"; }
+  if (c.is_copy) { $("t-clean-text").textContent = "This is a cleaned copy: edit the original dataset instead."; $("t-export").hidden = true; return; }
+  const off = D.episodes.filter(e => e.disabled).length, trimmed = D.episodes.filter(e => e.trim).length;
+  const fresh = c.copy_time && c.copy_time >= c.edit_time;
+  const usable = `${c.usable_episodes} of ${D.total_episodes} episodes, ${c.usable_frames.toLocaleString()} frames`;
+  $("t-clean-text").innerHTML = !c.edited && !c.copy_time
+    ? `<span class="dim">No cleaning yet. Trim or disable takes above; then make a cleaned copy to train on.</span>`
+    : `<b>Cleaning:</b> ${off} disabled, ${trimmed} trimmed → ${usable}. `
+      + (fresh ? `<span class="mono">${esc(c.copy)}</span> is up to date: train on it.`
+               : c.copy_time ? `<span style="color:var(--orange4)"><span class="mono">${esc(c.copy)}</span> is out of date.</span>`
+               : `Not exported yet.`);
+  $("t-export").hidden = !c.edited && !c.copy_time;
+  $("t-export").disabled = busy || cleaningBusy || c.usable_episodes === 0;
+  $("t-export").textContent = cleaningBusy === "export" ? "Writing copy…" : c.copy_time ? "Update cleaned copy" : "Make cleaned copy";
+}
+let cleaningBusy = false;
+async function editEpisode(change) {
+  if (!D || cur === null || cleaningBusy) return;
+  const name = D.name, i = cur;
+  cleaningBusy = "edit"; renderCleaning();
+  try {
+    const r = await post(`/api/lab/datasets/${enc(name)}/episodes/${i}/cleaning`, change);
+    if (D && D.name === name) {
+      const ep = D.episodes[i], fps = D.fps;
+      const wasUsable = !ep.disabled, oldKept = ep.kept_frames;
+      ep.disabled = !!r.disabled; ep.trim = r.trim || null;
+      const [a, b] = keptRange(ep); ep.kept_frames = b - a;
+      const c = D.cleaning;
+      c.usable_episodes += (!ep.disabled) - wasUsable;
+      c.usable_frames += (ep.disabled ? 0 : ep.kept_frames) - (wasUsable ? oldKept : 0);
+      c.edited = D.episodes.some(e => e.disabled || e.trim); c.edit_time = (c.copy_time || 0) + 1;  // any edit makes the copy out of date
+      renderList(); drawJoints();
+    }
+  } catch (e) { toast("Not changed", e.message, true); }
+  finally { cleaningBusy = false; if (D) renderCleaning(); }
+}
+$("k-in").onclick = () => { const ep = D.episodes[cur]; editEpisode({trim:[frame, Math.max(frame + 1, keptRange(ep)[1])]}); };
+$("k-out").onclick = () => { const ep = D.episodes[cur]; editEpisode({trim:[Math.min(keptRange(ep)[0], frame), frame + 1]}); };
+$("k-clear").onclick = () => editEpisode({trim:null});
+$("k-dis").onclick = () => editEpisode({disabled:!D.episodes[cur].disabled});
+$("t-export").onclick = async () => {
+  if (!D || cleaningBusy) return;
+  const name = D.name;
+  cleaningBusy = "export"; renderCleaning();
+  toast("Writing the cleaned copy…", "Every kept frame is decoded and re-encoded: several minutes for a large dataset (much longer on the Pi). Keep this page open.");
+  try {
+    const r = await post(`/api/lab/datasets/${enc(name)}/export-clean`);
+    toast(`Wrote ${r.name}`, `${r.episodes} episodes, ${r.frames.toLocaleString()} frames. Its training command is on its page.`);
+    cleaningBusy = false;
+    wanted = {name, episode:cur};
+    await loadDatasets();
+  } catch (e) { toast("Cleaned copy not written", e.message, true); }
+  finally { cleaningBusy = false; if (D) renderCleaning(); }
+};
 
 function renderList() {
   const n = D.episodes.length;
@@ -959,9 +1053,9 @@ function renderList() {
        <button class="btn sm danger" id="m-del" style="margin-left:auto"><svg class="i s"><use href="#i-trash"/></svg>Delete</button>`
     : `<span>Episodes</span><span class="count">${n}</span>`;
   if (marked.size) { $("m-clear").onclick = () => { marked.clear(); renderList(); }; $("m-del").onclick = () => askDeleteEpisodes([...marked]); }
-  $("eplist").innerHTML = D.episodes.map(e => `<div class="ep${e.index === cur ? " on" : ""}" data-i="${e.index}">
+  $("eplist").innerHTML = D.episodes.map(e => `<div class="ep${e.index === cur ? " on" : ""}${e.disabled ? " off" : ""}" data-i="${e.index}">
       <input type="checkbox" aria-label="Select episode ${e.index}" ${marked.has(e.index) ? "checked" : ""}>
-      <button class="go" type="button"><span class="n">${e.index}</span><span class="t">${esc(e.tasks.join(", ") || "—")}</span><span class="d">${secs(e.duration_s)}</span></button></div>`).join("");
+      <button class="go" type="button"><span class="n">${e.index}</span><span class="t">${esc(e.tasks.join(", ") || "—")}</span>${e.disabled ? '<span class="bdg off">off</span>' : ""}${e.trim ? '<span class="bdg trim">trimmed</span>' : ""}${e.perturbed ? '<span class="bdg" title="Recorded with DART noise">DART</span>' : ""}<span class="d">${secs((e.kept_frames ?? e.length) / D.fps)}</span></button></div>`).join("");
   const on = $("eplist").querySelector(".ep.on");
   if (on) on.scrollIntoView({block:"nearest"});
 }
@@ -1068,6 +1162,13 @@ function drawJoints() {
     if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
     const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
     const [lo, hi] = J.range[k], x = i => 1 + (n > 1 ? i / (n - 1) : 0) * (w - 2), y = v => h - 3 - (v - lo) / (hi - lo) * (h - 6);
+    const ep = D && cur !== null ? D.episodes[cur] : null;
+    if (ep) {  // trimmed-away or disabled parts are shaded: they will not be trained on
+      const [a, b] = ep.disabled ? [0, 0] : keptRange(ep);
+      g.fillStyle = ep.disabled ? "rgba(239,68,68,.12)" : "rgba(156,163,175,.14)";
+      if (a > 0 || ep.disabled) g.fillRect(0, 0, ep.disabled ? w : x(a), h);
+      if (!ep.disabled && b < n) g.fillRect(x(b - 1), 0, w - x(b - 1), h);
+    }
     g.strokeStyle = "#1f2937"; g.lineWidth = 1; g.beginPath(); g.moveTo(0, h - 0.5); g.lineTo(w, h - 0.5); g.stroke();
     g.strokeStyle = "#3987e5"; g.lineWidth = 2; g.lineJoin = g.lineCap = "round"; g.beginPath();
     J.action.forEach((r, i) => i ? g.lineTo(x(i), y(r[k])) : g.moveTo(x(i), y(r[k]))); g.stroke();
@@ -1676,6 +1777,9 @@ document.addEventListener("keydown", e => {
     else if (e.key === "ArrowLeft") { e.preventDefault(); pauseVideo(); seekFrame(frame - 1); }
     else if (e.key === "ArrowDown") { e.preventDefault(); $("v-next").click(); }
     else if (e.key === "ArrowUp") { e.preventDefault(); $("v-prev").click(); }
+    else if (e.key === "[" && !$("k-in").disabled) { e.preventDefault(); $("k-in").click(); }
+    else if (e.key === "]" && !$("k-out").disabled) { e.preventDefault(); $("k-out").click(); }
+    else if (e.key.toLowerCase() === "d" && !$("k-dis").disabled) { e.preventDefault(); $("k-dis").click(); }
   }
 });
 

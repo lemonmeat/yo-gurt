@@ -53,6 +53,22 @@ grasp:
   image_width: 640        # Lab demos record the wrist frame at this size (a trained policy uses its own)
   image_height: 360
 
+# DART: while recording grasp demonstrations, some takes send the follower leader + smooth noise but
+# save the clean leader pose as the action, so the policy learns to recover from drift (data/grasp_act).
+dart:
+  fraction: 1.0           # default share of takes that are perturbed (the Lab's form can change it)
+  tau_s: 0.8              # how slowly the offset wanders (Ornstein-Uhlenbeck time constant)
+  smooth_s: 0.3           # low-pass on the offset, so it glides instead of stepping each frame
+  max_sigmas: 2.0         # never more than this many sigma_deg off
+  ramp_s: 1.0             # the noise fades in over this long at the start of a take
+  sigma_deg:              # typical offset per joint; size it like your policy's errors. 0 = untouched
+    shoulder_pan: 3.0
+    shoulder_lift: 2.0    # shoulder and elbow move the hand most per degree: keep them small
+    elbow_flex: 2.0
+    wrist_flex: 3.0
+    wrist_roll: 3.0
+    gripper: 0.0          # gripper noise drops cups; leave it alone
+
 verify:
   threshold: 0.6          # P(held) needed
   window_s: 1.0           # averaged over this long

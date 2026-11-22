@@ -48,6 +48,25 @@ kept. Esc (KILL) also ends it and keeps what was saved. The dataset is only read
 has ended one of these ways: a session cut off by a crash or power cut leaves a dataset that LeRobot
 cannot open (the Lab marks it unreadable; delete it).
 
+## Perturbed takes (DART)
+
+The form's **Perturbed takes (%)** (default `dart.fraction` in `config/robot.yaml`, 50 %) picks that
+share of takes at random. In a perturbed take the follower is sent the leader's pose **plus a small,
+smooth, slowly wandering offset** (a few degrees per joint, never the gripper), while the dataset
+saves the **clean leader pose** as the action. The status line says PERTURBED. Just do the grasp as
+usual and steer the follower back onto the cup when it drifts. That gives the policy examples of
+"slightly off-track → what to do about it", which clean demonstrations never contain (DART, Laskey
+et al. 2017), so a trained policy recovers from its own small errors instead of compounding them.
+
+- In the episode browser the joint trace shows it: in a perturbed episode `state` wanders a few
+  degrees off `action`. `data/grasp_act/<name>/dart.json` lists which episodes were perturbed
+  (deleting episodes keeps it right).
+- Size the noise like the errors your policy makes (`dart.sigma_deg`, per joint). Too little and it
+  never leaves the clean path; too much and the demonstrations become a fight. Shoulder and elbow
+  move the hand most per degree, so they get the smallest values.
+- DART only covers drift as large as the noise. For bigger failures of a trained policy, record
+  interventions (HG-DAgger) afterwards.
+
 ## Review and delete episodes (the Lab)
 
 Pick a dataset to see its episodes. Each one plays back from the dataset's own video file, with a
@@ -73,6 +92,22 @@ What makes good demonstrations
 Each dataset is a standard LeRobot dataset in `data/grasp_act/<name>/` (repo id `local/<name>`, wrist
 video at 640×360, 30 fps, `observation.state` and `action` as the six joint values). New episodes can
 only be added to a dataset recorded with the same frame rate and picture size.
+
+## Clean (the Lab)
+
+Under each episode's video:
+
+- **[ Trim start here** / **Trim end here ]** (keys `[` and `]`) keep only part of a take, from the
+  frame on screen. Use it to cut the fumbling at the start or the drifting after the hold.
+  **Keep whole take** undoes it. The orange bar and the grey shading on the joint traces show what is kept.
+- **Disable** (key `D`) leaves a take out of training without deleting it. **Enable** brings it back.
+
+These edits are stored on the robot computer in `data/grasp_act/<name>/cleaning.json`, next to
+the recording, and are never applied to it, so they can all be undone. `lerobot-train` cannot read
+them, so press **Make cleaned copy** (under the training command): it writes `<name>-clean`, a normal
+dataset with the disabled takes left out and the trims applied. Train on that copy. The Lab says
+when the copy is out of date because you edited (or recorded) more since. Making the copy re-encodes
+every kept frame: about 5 minutes for 20k frames on a laptop, much longer on the Pi.
 
 ## Train
 

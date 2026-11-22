@@ -96,6 +96,158 @@ def _problem(path: Path, info: dict) -> str | None:
                 "dataset was finalised. It cannot be repaired; delete it.")
 
 
+DART_FILE = "dart.json"  # {"perturbed": [episode indices]}: which takes had DART noise (see dart.py)
+
+
+def perturbed(path: Path) -> set[int]:
+    try:
+        return set(json.loads((path / DART_FILE).read_text())["perturbed"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return set()
+
+
+def _write_perturbed(path: Path, indices) -> None:
+    (path / DART_FILE).write_text(json.dumps({"perturbed": sorted(indices)}))
+
+
+# ---- cleaning: trims and disabled episodes ----------------------------------------------------
+# Kept beside the recording in <dataset>/cleaning.json and never applied to it, so every edit can be
+# undone: {"episodes": {"<index>": {"disabled": true, "trim": [first frame, end frame (exclusive)]}}}.
+# lerobot-train cannot read it, so export_clean() writes a copy with the edits applied, to train on.
+CLEAN_FILE = "cleaning.json"
+CLEAN_SUFFIX = "-clean"
+
+
+def cleaning(path: Path) -> dict[int, dict]:
+    try:
+        raw = json.loads((path / CLEAN_FILE).read_text())["episodes"]
+        return {int(k): v for k, v in raw.items() if isinstance(v, dict)}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return {}
+
+
+def _write_cleaning(path: Path, edits: dict[int, dict]) -> None:
+    edits = {i: e for i, e in edits.items() if e.get("disabled") or e.get("trim")}
+    file = path / CLEAN_FILE
+    if not edits and not file.exists():
+        return
+    tmp = file.with_suffix(".tmp")
+    tmp.write_text(json.dumps({"episodes": {str(i): edits[i] for i in sorted(edits)}}, indent=1))
+    tmp.replace(file)  # never a half-written file, even on a power cut
+
+
+def _kept_range(edit: dict | None, length: int) -> tuple[int, int]:
+    start, end = (edit or {}).get("trim") or (0, length)
+    return max(0, min(int(start), length)), max(0, min(int(end), length))
+
+
+def clean_name(name: str) -> str:
+    return name[:64 - len(CLEAN_SUFFIX)] + CLEAN_SUFFIX
+
+
+def set_cleaning(name: str, index: int, disabled=None, trim="keep") -> dict:
+    """Disable/enable one episode and/or set its trim ([start, end) in frames, or None for the whole take)."""
+    path = dataset_dir(name)
+    info = _info(path)
+    if problem := _problem(path, info):
+        raise RuntimeError(problem)
+    episode = next((e for e in _episodes(path, info) if e["index"] == index), None)
+    if episode is None:
+        raise LookupError(f"{name} has no episode {index}")
+    edits = cleaning(path)
+    edit = dict(edits.get(index, {}))
+    if disabled is not None:
+        if not isinstance(disabled, bool):
+            raise ValueError("disabled must be true or false")
+        edit["disabled"] = disabled
+    if trim != "keep":
+        if trim is None:
+            edit.pop("trim", None)
+        else:
+            if (not isinstance(trim, list) or len(trim) != 2
+                    or not all(isinstance(v, int) and not isinstance(v, bool) for v in trim)):
+                raise ValueError("trim must be [first frame, end frame]")
+            start, end = trim
+            if not 0 <= start < end <= episode["length"]:
+                raise ValueError(f"trim must satisfy 0 <= start < end <= {episode['length']}")
+            if end - start < info["fps"] // 2:
+                raise ValueError("a trimmed episode must keep at least half a second")
+            edit["trim"] = None if (start, end) == (0, episode["length"]) else [start, end]
+    edits[index] = {k: v for k, v in edit.items() if v}
+    _write_cleaning(path, edits)
+    return edits[index]
+
+
+def export_clean(name: str) -> dict:
+    """Write <name>-clean: the enabled episodes, each cut to its trim, as a normal LeRobot dataset.
+    Built in a staging folder and swapped in at the end, so an earlier copy survives a failure."""
+    import pyarrow.parquet as pq
+    from lerobot.datasets import LeRobotDataset
+    from torchcodec.decoders import VideoDecoder
+
+    path = dataset_dir(name)
+    info = _info(path)
+    if problem := _problem(path, info):
+        raise RuntimeError(problem)
+    if name.endswith(CLEAN_SUFFIX):
+        raise ValueError("this is already a cleaned copy: clean the original dataset instead")
+    edits, marks = cleaning(path), perturbed(path)
+    episodes = [e for e in _episodes(path, info) if not edits.get(e["index"], {}).get("disabled")]
+    if not episodes:
+        raise ValueError("every episode is disabled: nothing to export")
+    target_name = clean_name(name)
+    target = root() / target_name
+    cams = _cameras(info)
+    builtin = {"timestamp", "frame_index", "episode_index", "index", "task_index"}
+    feats = {k: v for k, v in info["features"].items() if k not in builtin}
+    staging = Path(tempfile.mkdtemp(prefix=f".{target_name}.export-", dir=root()))
+    out_dir = staging / "new"
+    try:
+        out = LeRobotDataset.create(repo_id(target_name), info["fps"], features=feats, root=out_dir,
+                                    robot_type=info.get("robot_type"), use_videos=True, image_writer_threads=4)
+        tables, decoders, new_marks, frames = {}, {}, [], 0
+        for e in episodes:
+            key = tuple(e["data"])
+            if key not in tables:
+                file = path / info["data_path"].format(chunk_index=key[0], file_index=key[1])
+                tables[key] = pq.read_table(file).to_pandas()
+            rows = tables[key][tables[key]["episode_index"] == e["index"]].sort_values("frame_index")
+            start, end = _kept_range(edits.get(e["index"]), e["length"])
+            pictures = {}
+            for cam in cams:
+                v = e["videos"][cam]
+                vkey = (cam, v["chunk"], v["file"])
+                if vkey not in decoders:
+                    decoders[vkey] = VideoDecoder(str(video_file(name, cam, v["chunk"], v["file"])))
+                first = round(v["from"] * info["fps"])
+                batch = decoders[vkey].get_frames_at(list(range(first + start, first + end)))
+                pictures[cam] = batch.data.permute(0, 2, 3, 1).numpy()  # N,H,W,C uint8
+            task = (e["tasks"] or [""])[0]
+            for k, (_, row) in enumerate(rows.iloc[start:end].iterrows()):
+                frame = {key: np.asarray(row[key], dtype=np.float32) for key in feats
+                         if not key.startswith(CAMERA)}
+                frame.update({CAMERA + cam: pictures[cam][k] for cam in cams})
+                out.add_frame({**frame, "task": task})
+                frames += 1
+            out.save_episode()
+            if e["index"] in marks:
+                new_marks.append(out.meta.total_episodes - 1)
+        out.finalize()
+        if new_marks:
+            _write_perturbed(out_dir, new_marks)
+        (out_dir / "SOURCE.json").write_text(json.dumps(
+            {"source": name, "episodes": [e["index"] for e in episodes],
+             "trims": {str(i): edits[i]["trim"] for i in edits if edits[i].get("trim")}}, indent=1))
+        if target.exists():
+            target.rename(staging / "old")
+        out_dir.rename(target)
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+    log.info("exported %s: %d episodes, %d frames", target_name, len(episodes), frames)
+    return {"name": target_name, "episodes": len(episodes), "frames": frames,
+            "train_command": train_command(target_name)}
+
+
 def _size_mb(path: Path) -> float:
     return round(sum(f.stat().st_size for f in path.rglob("*") if f.is_file()) / 1e6, 1)
 
@@ -145,7 +297,23 @@ def describe(name: str) -> dict:
     problem = _problem(path, info)
     if problem:
         return {**base, "problem": problem, "episodes": []}
-    return {**base, "problem": None, "episodes": _episodes(path, info),
+    marked, edits = perturbed(path), cleaning(path)
+    episodes = []
+    for e in _episodes(path, info):
+        edit = edits.get(e["index"], {})
+        start, end = _kept_range(edit, e["length"])
+        episodes.append({**e, "perturbed": e["index"] in marked, "disabled": bool(edit.get("disabled")),
+                         "trim": edit.get("trim"), "kept_frames": end - start})
+    usable = [e for e in episodes if not e["disabled"]]
+    copy_info = root() / clean_name(name) / "meta" / "info.json"
+    changed = [p for p in (path / CLEAN_FILE, path / "meta" / "info.json") if p.is_file()]
+    return {**base, "problem": None, "episodes": episodes, "perturbed_episodes": len(marked),
+            "cleaning": {"edited": bool(edits), "usable_episodes": len(usable),
+                         "usable_frames": sum(e["kept_frames"] for e in usable),
+                         "is_copy": name.endswith(CLEAN_SUFFIX), "copy": clean_name(name),
+                         # the copy is stale when the recording or its edits changed after it was made
+                         "copy_time": copy_info.stat().st_mtime if copy_info.is_file() else None,
+                         "edit_time": max((p.stat().st_mtime for p in changed), default=0)},
             "image_sizes": {cam: info["features"][CAMERA + cam]["shape"][:2] for cam in base["cameras"]}}
 
 
@@ -205,6 +373,11 @@ def delete_episodes(name: str, indices: list[int]) -> int:
     try:
         lerobot_delete(LeRobotDataset(repo_id(name), root=path), chosen, output_dir=staging / "kept",
                        repo_id=repo_id(name))
+        # the episodes after a deleted one move down: renumber the DART marks the same way
+        kept = [i for i in range(total) if i not in set(chosen)]
+        _write_perturbed(staging / "kept", [new for new, old in enumerate(kept) if old in perturbed(path)])
+        old_edits = cleaning(path)
+        _write_cleaning(staging / "kept", {new: old_edits[old] for new, old in enumerate(kept) if old in old_edits})
         path.rename(staging / "old")
         try:
             (staging / "kept").rename(path)
@@ -229,13 +402,15 @@ def delete_dataset(name: str) -> None:
 
 def settings(raw: dict, cfg) -> dict:
     """The recording form, checked. Mirrors LeLab's: dataset, task, episodes, episode time, reset time."""
-    def number(key, low, high):
-        value = raw.get(key)
+    def number_value(label, value, low, high):
         if isinstance(value, bool) or not isinstance(value, (int, float)) or value != int(value):
-            raise ValueError(f"{key.replace('_', ' ')} must be a whole number")
+            raise ValueError(f"{label} must be a whole number")
         if not low <= value <= high:
-            raise ValueError(f"{key.replace('_', ' ')} must be between {low} and {high}")
+            raise ValueError(f"{label} must be between {low} and {high}")
         return int(value)
+
+    def number(key, low, high):
+        return number_value(key.replace("_", " "), raw.get(key), low, high)
 
     name = check_name(raw.get("dataset"))
     task = str(raw.get("task") or "").strip() or cfg.grasp.task
@@ -249,7 +424,9 @@ def settings(raw: dict, cfg) -> dict:
         if problem := _problem(path, info):
             raise RuntimeError(problem)
         _check_compatible(info, cfg)
+    dart = raw.get("dart_percent", round(cfg.dart.fraction * 100))
     return {"dataset": name, "new": new, "task": task[:200],
+            "dart_fraction": number_value("dart percent", dart, 0, 100) / 100,
             "num_episodes": number("num_episodes", 1, 200),
             "episode_time_s": number("episode_time_s", 3, 600),
             "reset_time_s": number("reset_time_s", 0, 600)}  # 0 = wait for "Start Next Episode"
@@ -359,12 +536,16 @@ class Session:
                 "task": self.settings["task"],
             })
 
-    def save(self) -> int:
+    def save(self, perturbed_take: bool = False) -> int:
         """Keep the episode just recorded. Returns how many episodes the dataset now has."""
         with self.lock:
             self.dataset.save_episode()
             self.saved += 1
-            return self.dataset.meta.total_episodes
+            total = self.dataset.meta.total_episodes
+            if perturbed_take:
+                path = root() / self.settings["dataset"]
+                _write_perturbed(path, perturbed(path) | {total - 1})
+            return total
 
     def discard(self) -> None:
         with self.lock:

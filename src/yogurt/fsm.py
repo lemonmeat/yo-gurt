@@ -13,12 +13,13 @@ robot is in Check, Grasp or Safe Stop (paused); entering any other state closes 
 
 import asyncio
 import logging
+import random
 import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
 
-from . import audio, config, infer, lab, vision
+from . import audio, config, dart, infer, lab, vision
 from .arm import BODY, Arm, ArmError
 from .collect import ImageCapture
 from .parse import Command, parse_command
@@ -526,15 +527,21 @@ class Brain:
 
         for stale in ("end_recording", "rerecord"):  # presses meant for an earlier phase
             self.take(stale)
+        # DART: a perturbed take sends the follower leader + smooth noise, but saves the clean leader pose
+        # as the action, so the dataset holds "drifted state -> what the human meant" pairs (see dart.py).
+        noise = dart.Perturbation(self.cfg.dart) if random.random() < s["dart_fraction"] else None
         session.set_phase("recording")
-        self.say(f"recording episode {number}: grasp the cup, lift it a little, hold still, then End Episode")
-        frames, outcome = 0, None
+        self.say(f"recording episode {number}{' (perturbed)' if noise else ''}: grasp the cup, lift it a little, "
+                 "hold still, then End Episode")
+        frames, outcome, last = 0, None, time.monotonic()
         while outcome is None:  # 2
             tick = time.monotonic()
             elapsed = tick - session.phase_started
-            action = self.arm.clamp(await asyncio.to_thread(session.leader_pose))
+            action = self.arm.clamp(await asyncio.to_thread(session.leader_pose))  # the label: human intent
             frame = self.wrist.read()
-            self.arm.set_target(action, fast)
+            sent = self.arm.clamp(noise.apply(action, tick - last)) if noise else action
+            last = tick
+            self.arm.set_target(sent, fast)
             self._watch_gripper(action["gripper"])
             if frame is not None:
                 await asyncio.to_thread(session.add, dict(self.arm.pos), action, frame)
@@ -546,7 +553,8 @@ class Brain:
             elif elapsed >= s["episode_time_s"]:
                 outcome = "timeout"
             else:
-                self.detail = (f"RECORDING episode {number} of {s['num_episodes']}: {elapsed:.0f} of "
+                drift = " (PERTURBED: the follower drifts, steer it back)" if noise else ""
+                self.detail = (f"RECORDING episode {number} of {s['num_episodes']}{drift}: {elapsed:.0f} of "
                                f"{s['episode_time_s']} s, {frames} frames. Grasp, lift, hold still, End Episode.")
                 await asyncio.sleep(max(0.0, period - (time.monotonic() - tick)))
 
@@ -554,8 +562,9 @@ class Brain:
         if outcome == "save" and frames > 0:
             session.set_phase("saving")
             self.detail = f"Saving episode {number}…"
-            total = await asyncio.to_thread(session.save)
-            self.say(f"episode {number} saved ({frames} frames, {seconds:.1f} s); {s['dataset']} has {total} episodes")
+            total = await asyncio.to_thread(session.save, noise is not None)
+            self.say(f"episode {number} saved ({frames} frames, {seconds:.1f} s{', perturbed' if noise else ''}); "
+                     f"{s['dataset']} has {total} episodes")
         else:
             session.discard()
             why = {"save": "no wrist frames arrived", "rerecord": "operator pressed Re-record",
