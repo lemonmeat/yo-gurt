@@ -41,6 +41,7 @@ mic:
 
 # .onnx runs on the Pi's CPU, .hef on the AI HAT+ 2 (see README, "Raspberry Pi 5 + AI HAT+ 2").
 # A model whose file is missing is reported as not loaded; its state's step-through button still works.
+# A .hef that is missing or will not run on the HAT falls back to the .onnx of the same name, on the CPU.
 models:
   wake_word: models/wake_word.onnx        # tiny, runs every 100 ms: keep on the CPU
   yogurt_detector: models/yogurt_detector.hef   # `detector hailo` on an x86 Linux box makes it

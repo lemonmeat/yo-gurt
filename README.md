@@ -115,8 +115,10 @@ uv run yogurt pi          # http://<pi-address>:8080 from the laptop, gurt / gur
 
 `config/hardware_pi.yaml` listens on the local network. The yogurt detector runs on the AI HAT+ 2
 (Hailo-10H); every other model runs on the Pi's CPU. A path ending in `.hef` is run through HailoRT
-([src/yogurt/infer.py](src/yogurt/infer.py), written from Hailo's reference `HailoInfer` example); put
-`models/yogurt_detector.onnx` back in `hardware_pi.yaml` to run the detector on the CPU instead.
+([src/yogurt/infer.py](src/yogurt/infer.py), written from Hailo's reference `HailoInfer` example). If the
+`.hef` is missing, or HailoRT cannot load it and run a test picture through it, the app loads
+`models/yogurt_detector.onnx` instead and runs Check on the CPU; the "Models and hardware" panel says
+"ready, on the CPU" and why. Put `models/yogurt_detector.onnx` in `hardware_pi.yaml` to always use the CPU.
 **Nothing in this section has been run on a Pi or a HAT yet.**
 
 **HailoRT on the Pi.** Raspberry Pi OS Trixie (64-bit), then:

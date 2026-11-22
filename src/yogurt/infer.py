@@ -42,15 +42,32 @@ class HailoModel:
         params.scheduling_algorithm = HailoSchedulingAlgorithm.ROUND_ROBIN  # lets several models share the chip
         params.group_id = "SHARED"   # also what hailo-ollama must be started with to share the chip (README)
         self.device = VDevice(params)
-        self.model = self.device.create_infer_model(str(path))
-        self.model.set_batch_size(1)
-        self.outputs = [info.name for info in HEF(str(path)).get_output_vstream_infos()]
-        for name in self.outputs:
-            self.model.output(name).set_format_type(FormatType.FLOAT32)
-        self._context = self.model.configure()
-        self.configured = self._context.__enter__()
-        self.height, self.width = self.model.input().shape[:2]
-        self.meta = {}
+        self._context = None
+        try:
+            self.model = self.device.create_infer_model(str(path))
+            self.model.set_batch_size(1)
+            self.outputs = [info.name for info in HEF(str(path)).get_output_vstream_infos()]
+            for name in self.outputs:
+                self.model.output(name).set_format_type(FormatType.FLOAT32)
+            self._context = self.model.configure()
+            self.configured = self._context.__enter__()
+            self.height, self.width = self.model.input().shape[:2]
+            self.meta = {}
+            self.run(np.zeros((self.height, self.width, 3), np.uint8))  # loaded is not enough: it must also run
+        except Exception:
+            try:
+                self.close()
+            except Exception:
+                log.exception("releasing the AI HAT+ 2 after a failed load")
+            raise
+
+    def close(self) -> None:
+        """Give the chip back, so a failed load does not keep it from hailo-ollama or a later reload."""
+        if self._context is not None:
+            self._context.__exit__(None, None, None)
+            self._context = None
+        if hasattr(self.device, "release"):
+            self.device.release()
 
     def run(self, rgb: np.ndarray) -> list:
         buffers = {name: np.empty(self.model.output(name).shape, dtype=np.float32) for name in self.outputs}

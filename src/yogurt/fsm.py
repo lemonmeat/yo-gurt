@@ -94,16 +94,37 @@ class Brain:
 
         def attempt(name: str, build):
             file = config.path(paths[name])
+            if file.suffix == ".hef":
+                # The AI HAT+ 2 may be absent, busy or without HailoRT: then run the .onnx beside it on the CPU.
+                if file.exists():
+                    try:
+                        model = build(file)
+                        self.models[name] = "ready, on the AI HAT+ 2"
+                        return model
+                    except Exception as e:
+                        log.exception("loading %s on the AI HAT+ 2", name)
+                        why = f"{file.name} did not run on the AI HAT+ 2: {e}"
+                else:
+                    why = f"no {file.name}"
+                onnx = file.with_suffix(".onnx")
+                if not onnx.exists():
+                    lead = f"error: {why}" if file.exists() else f"missing ({paths[name]})"
+                    self.models[name] = f"{lead}, and no {onnx.name} to fall back on"
+                    return None
+                log.warning("%s: %s, using %s on the CPU", name, why, onnx.name)
+                file, fallback = onnx, f" ({why})"
+            else:
+                fallback = ""
             if not file.exists():
                 self.models[name] = f"missing ({paths[name]})"
                 return None
             try:
                 model = build(file)
-                self.models[name] = "ready, on the AI HAT+ 2" if file.suffix == ".hef" else "ready"
+                self.models[name] = f"ready, on the CPU{fallback}" if fallback else "ready"
                 return model
             except Exception as e:
                 log.exception("loading %s", name)
-                self.models[name] = f"error: {e}"
+                self.models[name] = f"error: {e}{fallback}"
                 return None
 
         def grasp_policy(folder):
