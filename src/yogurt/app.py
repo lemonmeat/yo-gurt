@@ -489,7 +489,7 @@ def make_app(cfg, brain: Brain) -> web.Application:
         elif action == "rerecord" and phase == "recording":
             brain.signal("rerecord")
         elif action == "resume" and phase == "paused":
-            brain.go("CHECK", "recording resumed")
+            brain.go(brain.episode_start(), "recording resumed")
         else:
             raise RuntimeError(f"'{action}' is not possible while {phase}")
         return web.json_response({"ok": True})

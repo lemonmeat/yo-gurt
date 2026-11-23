@@ -414,7 +414,7 @@
       <div class="center"><span class="pill pulse" id="r-pill" role="status" aria-live="polite"><i></i><span></span></span></div>
       <div class="center" id="r-detail"></div>
       <div id="r-paused" class="warnbox" hidden>Paused: the robot is in Safe Stop. Nothing is being recorded and the take in progress was
-        discarded. <b>Resume</b> starts episode <span id="r-paused-ep"></span> again from Check — the arm moves by itself.</div>
+        discarded. <b>Resume</b> starts episode <span id="r-paused-ep"></span> again <span id="r-paused-how"></span>.</div>
       <div class="feed"><img id="r-feed" alt="wrist camera"></div>
       <div class="center">
         <div class="timer"><span class="big mono" id="r-timer">00:00</span><span class="lim mono" id="r-limit"></span></div>
@@ -573,6 +573,10 @@
     <input type="number" id="f-dart" min="0" max="100" step="1">
     <div class="hint">DART: in this share of takes the follower drifts slightly off the leader (smooth noise, gripper untouched)
       and the dataset keeps your clean leader motion as the action. Steer it back as you would by eye; the policy learns to recover. 0 = off.</div>
+    <label style="display:flex;gap:8px;align-items:center;margin-top:14px;font-size:13px">
+      <input type="checkbox" id="f-survey"> Start each episode from the survey pose</label>
+    <div class="hint">On: before each take the robot moves to the survey pose, finds the cup and centres on it, as its own grasp
+      does. Off: each take starts wherever the arm is, so you can record grasps from any position.</div>
     <div class="hint bad" id="f-error"></div>
     <div class="foot">
       <button class="btn cancel" data-close>Cancel</button>
@@ -809,6 +813,7 @@ function renderRecording(ses) {
   $("r-detail").textContent = S.detail;
   $("r-paused").hidden = ses.phase !== "paused";
   $("r-paused-ep").textContent = ses.episode;
+  $("r-paused-how").textContent = ses.from_survey ? "from Check — the arm moves by itself" : "from where the arm is now";
 
   $("r-timer").textContent = mmss(elapsed);
   $("r-timer").style.color = c.timer;
@@ -816,7 +821,9 @@ function renderRecording(ses) {
   let caption = ph.caption || "";
   if (ses.phase === "recording") caption = `Episode ${ses.episode} recording time — end it before ${mmss(ses.episode_time_s)} or the take is discarded`;
   if (ses.phase === "resetting") caption = ses.done ? "All episodes recorded: put the cup down, then Finish"
-    : limit ? "Reset time — when it runs out the arm moves to the survey pose by itself" : "Reset — no time limit: press Start Next Episode when ready";
+    : !limit ? "Reset — no time limit: press Start Next Episode when ready"
+    : ses.from_survey ? "Reset time — when it runs out the arm moves to the survey pose by itself"
+    : "Reset time — when it runs out the next take starts from where the arm is";
   $("r-caption").textContent = caption;
   $("r-bar").style.width = limit ? Math.min(100, 100 * elapsed / limit) + "%" : "0%";
   $("r-bar").style.background = c.bar;
@@ -890,9 +897,6 @@ function openRecord(target) {
   appendTo = target;
   const saved = JSON.parse(localStorage.getItem(FORM_KEY) || "{}");
   $("f-title").textContent = target ? "Record more episodes" : "Record grasp demonstrations";
-  $("f-desc").textContent = target
-    ? `New episodes are added after the ${target.episodes} already in ${target.name}.`
-    : "Each episode: the robot finds and centres the cup, you bring the leader arm to the follower's pose, then grasp the cup, lift it a little and hold still.";
   $("f-name-row").hidden = !!target;
   $("f-name").value = stamp();
   $("f-task").value = saved.task || LIST.defaults.task;
@@ -900,6 +904,7 @@ function openRecord(target) {
   $("f-ep").value = saved.episode_time_s || 20;
   $("f-reset").value = saved.reset_time_s ?? 15;
   $("f-dart").value = saved.dart_percent ?? LIST.defaults.dart_percent ?? 50;
+  $("f-survey").checked = saved.from_survey ?? false;
   $("f-error").textContent = "";
   checkForm();
   openDialog("dlg-record");
@@ -907,10 +912,14 @@ function openRecord(target) {
 function formValues() {
   return {dataset: appendTo ? appendTo.name : $("f-name").value.trim(), new: !appendTo, task: $("f-task").value.trim(),
           num_episodes: Number($("f-n").value), episode_time_s: Number($("f-ep").value), reset_time_s: Number($("f-reset").value),
-          dart_percent: Number($("f-dart").value)};
+          dart_percent: Number($("f-dart").value), from_survey: $("f-survey").checked};
 }
 function checkForm() {
   const v = formValues(), problems = blockers();
+  $("f-desc").textContent = (appendTo ? `New episodes are added after the ${appendTo.episodes} already in ${appendTo.name}. ` : "")
+    + (v.from_survey
+      ? "Each episode: the robot finds and centres the cup, you bring the leader arm to the follower's pose, then grasp the cup, lift it a little and hold still."
+      : "Each episode starts wherever the arm is: you bring the leader arm to the follower's pose, then grasp the cup, lift it a little and hold still.");
   const names = new Set((LIST?.datasets || []).map(d => d.name.toLowerCase()));
   let nameHint = `Saved in data/grasp_act/${v.dataset || "…"} as LeRobot dataset local/${v.dataset || "…"}.`, bad = false;
   if (!appendTo && !NAME_RE.test(v.dataset)) { nameHint = `A name is ${LIST.name_rule}.`; bad = true; }
@@ -921,14 +930,14 @@ function checkForm() {
   const numbersOk = whole(v.num_episodes, 1, 200) && whole(v.episode_time_s, 3, 600) && whole(v.reset_time_s, 0, 600) && whole(v.dart_percent, 0, 100);
   $("f-error").textContent = numbersOk ? "" : "Episodes 1–200, episode time 3–600 s, reset time 0–600 s, perturbed 0–100 %, whole numbers.";
   const notes = problems.map(p => `<div class="warnbox">${esc(p)}</div>`);
-  if (!LIST.detector) notes.push(`<div class="warnbox">No yogurt detector yet, so the robot cannot find the cup itself: before each episode, put the cup in the middle of the wrist picture and press <b>Cup is centred</b>.</div>`);
+  if (!LIST.detector && v.from_survey) notes.push(`<div class="warnbox">No yogurt detector yet, so the robot cannot find the cup itself: before each episode, put the cup in the middle of the wrist picture and press <b>Cup is centred</b>.</div>`);
   $("f-alerts").innerHTML = notes.join("");
   $("f-start").disabled = bad || !numbersOk || problems.length > 0 || !v.task;
 }
-["f-name", "f-task", "f-n", "f-ep", "f-reset", "f-dart"].forEach(id => $(id).addEventListener("input", checkForm));
+["f-name", "f-task", "f-n", "f-ep", "f-reset", "f-dart", "f-survey"].forEach(id => $(id).addEventListener("input", checkForm));
 $("f-start").onclick = async () => {
   const v = formValues(), d = $("dlg-record");
-  localStorage.setItem(FORM_KEY, JSON.stringify({task:v.task, num_episodes:v.num_episodes, episode_time_s:v.episode_time_s, reset_time_s:v.reset_time_s, dart_percent:v.dart_percent}));
+  localStorage.setItem(FORM_KEY, JSON.stringify({task:v.task, num_episodes:v.num_episodes, episode_time_s:v.episode_time_s, reset_time_s:v.reset_time_s, dart_percent:v.dart_percent, from_survey:v.from_survey}));
   try { audio = audio || new AudioContext(); } catch {}  // unlock sound with this click
   d.dataset.busy = "1"; $("f-start").disabled = true; $("f-start").lastChild.textContent = "Starting…";
   try { await post("/api/lab/record", v); delete d.dataset.busy; closeDialog("dlg-record"); }

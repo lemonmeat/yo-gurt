@@ -38,6 +38,13 @@ class GraspPolicy:
         self.cfg = cfg
         self.device = torch.device(cfg.models.act_device)
         self.policy = ACTPolicy.from_pretrained(str(folder))
+        # Re-plan from a fresh picture every n_action_steps instead of the trained default (often the
+        # whole chunk): the rest of each predicted chunk is thrown away.
+        steps, chunk = int(cfg.grasp.n_action_steps), self.policy.config.chunk_size
+        if not 1 <= steps <= chunk:
+            raise ValueError(f"grasp.n_action_steps is {steps}: it must be between 1 and the policy's chunk_size {chunk}")
+        self.policy.config.n_action_steps = steps
+        self.policy.reset()   # the action queue's length is set from n_action_steps here
         self.policy.to(self.device).eval()
         self.preprocess, self.postprocess = make_pre_post_processors(
             self.policy.config, pretrained_path=str(folder),

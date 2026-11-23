@@ -6,9 +6,10 @@ Each state is one coroutine that returns the name of the next state. The UI can 
 "grasped", "held", "grabbed". `detail` always says, in words, what the robot is doing and why;
 `view` holds the numbers the video overlays draw.
 
-A Lab recording session (lab.Session) reuses Check and Grasp: Check finds and centres the cup, then
-Grasp records the leader arm's demonstration (_demonstrate). The session stays open only while the
-robot is in Check, Grasp or Safe Stop (paused); entering any other state closes it.
+A Lab recording session (lab.Session) reuses Grasp, which records the leader arm's demonstration
+(_demonstrate). Each episode starts wherever the arm is, or, with the session's "from_survey" setting,
+with Check first (survey pose, find and centre the cup), as the robot's own grasp does. The session stays
+open only while the robot is in Check, Grasp or Safe Stop (paused); entering any other state closes it.
 """
 
 import asyncio
@@ -171,7 +172,7 @@ class Brain:
     # ---- Lab recording sessions --------------------------------------------------------------
 
     async def start_session(self, raw: dict) -> None:
-        """Start recording demonstrations: Check finds and centres the cup, then the leader arm does the grasp."""
+        """Start recording demonstrations: the leader arm does the grasp, from where the arm is or from Check."""
         settings = lab.settings(raw, self.cfg)
         if self.session.busy:
             raise RuntimeError("a recording session is already running")
@@ -189,8 +190,14 @@ class Brain:
             await asyncio.to_thread(self.session.close, "the robot changed state while the session was starting")
             raise
         self.request = Request()
-        self.say(f"recording session: {settings['num_episodes']} episode(s) into {settings['dataset']}")
-        self.go("CHECK", "recording session")
+        start = "from the survey pose" if settings["from_survey"] else "from wherever the arm is"
+        self.say(f"recording session: {settings['num_episodes']} episode(s) into {settings['dataset']}, "
+                 f"each starting {start}")
+        self.go(self.episode_start(), "recording session")
+
+    def episode_start(self) -> str:
+        """The state each episode of the open recording session begins in."""
+        return "CHECK" if self.session.settings.get("from_survey") else "GRASP"
 
     def _check_can_record(self) -> None:
         if self.state not in ("SAFE_STOP", "IDLE") or self._forced is not None:
@@ -528,8 +535,9 @@ class Brain:
         2. Record until End Episode (saved), Re-record (discarded) or the episode time running out
            (discarded and recorded again, as in LeLab: only takes you end yourself are kept).
         3. Reset: the leader still drives, nothing is recorded, until Start Next Episode or the reset
-           time runs out. Then the next episode begins with Check finding the cup again; after the
-           last one the session ends and the arm holds where it is.
+           time runs out. Then the next episode begins where the reset left the arm (or, from the survey
+           pose, with Check finding the cup again); after the last one the session ends and the arm
+           holds where it is.
         """
         session, s = self.session, self.session.settings
         period, fast = 1.0 / self.cfg.grasp.fps, self.cfg.arm.max_speed_dps
@@ -605,9 +613,12 @@ class Brain:
             if done:
                 self.detail = (f"All {s['num_episodes']} episodes recorded. Put the cup down with the leader arm "
                                f"and open the gripper; then Finish ({left}).")
-            else:
+            elif s["from_survey"]:
                 self.detail = (f"Reset, not recording ({left}): put the cup somewhere new with the leader arm and "
                                "open the gripper. Then the arm moves to the survey pose by itself and looks for it.")
+            else:
+                self.detail = (f"Reset, not recording ({left}): put the cup somewhere new and open the gripper, then "
+                               "hold the leader arm where the next take should start: it starts from there.")
             await asyncio.sleep(period)
 
         if done:
@@ -616,7 +627,7 @@ class Brain:
             self.say(f"recording session finished: {session.last['saved']} episode(s) saved to {s['dataset']}")
             return "SAFE_STOP"
         self.request = Request()  # a fresh search for the next episode
-        return "CHECK"
+        return self.episode_start()
 
     async def _verify(self) -> str:
         cfg = self.cfg.verify

@@ -102,7 +102,7 @@ def test_recording_session_keeps_only_the_episodes_you_end(monkeypatch, data):
                 await asyncio.sleep(seconds)
 
             settings = {"dataset": "demo", "new": True, "task": "Grab the yogurt cup.",
-                        "num_episodes": 2, "episode_time_s": 3, "reset_time_s": 0}
+                        "num_episodes": 2, "episode_time_s": 3, "reset_time_s": 0, "from_survey": True}
             status, reply = await post("/api/lab/record", {**settings, "num_episodes": 2.5})
             assert status == 400 and "whole number" in reply["error"]
             assert (await post("/api/lab/record", settings))[0] == 200
@@ -159,6 +159,61 @@ def test_recording_session_keeps_only_the_episodes_you_end(monkeypatch, data):
     assert [e["tasks"] for e in described["episodes"]] == [["Grab the yogurt cup."]] * 2
     for kept, grey in zip(shades(data / "demo", described["episodes"]), (90, 220), strict=True):
         assert len(kept) > 5 and all(abs(g - grey) < 6 for g in kept)  # no frame of a discarded take leaked in
+
+
+def test_recording_session_starts_each_episode_where_the_arm_is(monkeypatch, data):
+    """Without from_survey the arm never goes to the survey pose: every take, and a resumed one, starts in place."""
+    async def scenario():
+        brain = make_brain(monkeypatch)
+        brain.cfg.leader["port"] = "fake"
+        brain.wrist = GreyCamera()
+        monkeypatch.setattr(lab, "open_feetech", lambda kind, port, calibration: FakeLeader(brain.arm))
+        entered = []
+
+        async with TestClient(TestServer(make_app(brain.cfg, brain))) as client:
+            async def post(path, body):
+                response = await client.post(path, json=body, headers=AUTH)
+                return response.status, await response.json()
+
+            async def phase(name):
+                for _ in range(500):
+                    entered.append(brain.state)
+                    status = brain.session_status()
+                    if status.get("phase") == name:
+                        return status
+                    await asyncio.sleep(0.02)
+                raise AssertionError(f"stuck in {status.get('phase')} ({brain.detail}), not {name}")
+
+            async def press(action, seen):
+                status, reply = await post("/api/lab/session", {"action": action, "phase": seen})
+                assert status == 200, reply
+
+            settings = {"dataset": "here", "new": True, "task": "Grab the yogurt cup.",
+                        "num_episodes": 2, "episode_time_s": 5, "reset_time_s": 0,
+                        "dart_percent": 0}  # no perturbed takes: the follower stays exactly where the leader holds it
+            assert (await post("/api/lab/record", {**settings, "from_survey": "yes"}))[0] == 400
+            assert (await post("/api/lab/record", settings))[0] == 200
+            await phase("recording")
+            start = dict(brain.arm.pos)
+            await asyncio.sleep(0.3)
+            await press("next", "recording")
+            await phase("resetting")
+            await press("next", "resetting")
+            await phase("recording")
+            assert (await post("/api/state", {"state": "SAFE_STOP"}))[0] == 200
+            await phase("paused")
+            await press("resume", "paused")
+            await phase("recording")
+            assert "CHECK" not in entered
+            survey = brain.cfg.poses.survey
+            assert all(abs(brain.arm.pos[j] - start[j]) < 1 for j in start)  # every take began where the last ended
+            assert abs(start["shoulder_lift"] - survey.shoulder_lift) > 5   # ... which is not the survey pose
+            await asyncio.sleep(0.3)
+            await press("next", "recording")
+            assert (await phase("resetting"))["saved"] == 2
+
+    asyncio.run(scenario())
+    assert lab.describe("here")["total_episodes"] == 2
 
 
 def make_dataset(cfg, name, lengths):

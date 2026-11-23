@@ -48,8 +48,9 @@ check:
 grasp:
   task: Grab the yogurt cup.   # task string stored with the demonstrations
   fps: 30
-  duration_s: 20          # how long the ACT policy runs before Verify
+  duration_s: 30          # how long the ACT policy runs before Verify (each re-plan pauses ~3-4 s on the Pi CPU)
   closed_below: 35        # gripper % under which the hand counts as closed around the cup
+  n_action_steps: 40      # ACT steps run from each predicted chunk before it looks again (<= its chunk_size)
   image_width: 640        # Lab demos record the wrist frame at this size (a trained policy uses its own)
   image_height: 360
 

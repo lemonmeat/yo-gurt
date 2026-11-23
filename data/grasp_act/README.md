@@ -21,29 +21,33 @@ it later means recording again.
 
 The Lab works like Hugging Face's [LeLab](https://github.com/huggingface/leLab): a session records a
 set number of episodes into one dataset, each a timed **recording** phase followed by a timed
-**reset** phase. Yo-gurt adds two phases in front of every episode, so that each one starts exactly
-where the real run will.
+**reset** phase. Each episode starts wherever the arm is, so takes can begin from any pose (for example
+where the trained policy goes wrong). Tick **Start each episode from the survey pose** to have every
+episode start exactly where the real run does instead: Check finds and centres the cup first.
 
 1. Press **SAFE STOP** (or let the robot sit in Idle) and put the cup within reach.
 2. **New dataset** (or pick a dataset and **Record more** to add to it). Choose the number of
-   episodes, the episode time and the reset time, then **Start recording**.
+   episodes, the episode time, the reset time and whether to start from the survey pose, then
+   **Start recording**.
 3. Each episode then goes:
-   - **Finding the cup** — Check sweeps and centres on the cup. Without a trained detector, put the
-     cup in the middle of the wrist picture and press **Cup is centred** (→).
+   - **Finding the cup** (only when starting from the survey pose) — Check sweeps and centres on the
+     cup. Without a trained detector, put the cup in the middle of the wrist picture and press
+     **Cup is centred** (→).
    - **Match the leader arm** — bring the leader to the follower's pose; the screen names the joint
      that is furthest off. Recording starts by itself when they match, so the follower never jumps.
    - **Recording** — grasp the cup, lift it about 5 cm, hold still for a second, then **End Episode**
      (→). **Re-record** (Delete or ←) throws the take away. A take that reaches the episode time is
      discarded and recorded again, as in LeLab: only episodes you end yourself are kept.
    - **Reset** — nothing is recorded and the leader still drives the arm: put the cup somewhere new,
-     open the gripper, back away. When the reset time runs out (or you press **Start Next Episode**)
-     the arm moves to the survey pose **by itself** and the next episode begins; three beeps warn you
-     three seconds before. Reset time 0 waits for the button instead.
+     open the gripper and leave the arm where the next take should start. When the reset time runs out
+     (or you press **Start Next Episode**) the next episode begins from there (from the survey pose: the
+     arm first moves there **by itself**); three beeps warn you three seconds before. Reset time 0 waits
+     for the button instead.
 4. After the last episode, put the cup down in the reset phase and press **Finish Session**. The arm
    then holds where it is (Safe Stop).
 
 Space (SAFE STOP) pauses the session: the take in progress is discarded and **Resume** starts that
-episode again from Check. **Stop recording** ends the session early; everything saved so far is
+episode again (from where the arm is, or from Check). **Stop recording** ends the session early; everything saved so far is
 kept. Esc (KILL) also ends it and keeps what was saved. The dataset is only readable once a session
 has ended one of these ways: a session cut off by a crash or power cut leaves a dataset that LeRobot
 cannot open (the Lab marks it unreadable; delete it).

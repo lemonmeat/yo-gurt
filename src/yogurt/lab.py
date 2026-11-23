@@ -512,7 +512,8 @@ def delete_dataset(name: str) -> None:
 
 
 def settings(raw: dict, cfg) -> dict:
-    """The recording form, checked. Mirrors LeLab's: dataset, task, episodes, episode time, reset time."""
+    """The recording form, checked. Mirrors LeLab's (dataset, task, episodes, episode time, reset time), plus
+    the share of perturbed takes and whether each episode starts from the survey pose."""
     def number_value(label, value, low, high):
         if isinstance(value, bool) or not isinstance(value, (int, float)) or value != int(value):
             raise ValueError(f"{label} must be a whole number")
@@ -536,7 +537,13 @@ def settings(raw: dict, cfg) -> dict:
             raise RuntimeError(problem)
         _check_compatible(info, cfg)
     dart = raw.get("dart_percent", round(cfg.dart.fraction * 100))
+    from_survey = raw.get("from_survey", False)
+    if not isinstance(from_survey, bool):
+        raise ValueError("from survey must be true or false")
     return {"dataset": name, "new": new, "task": task[:200],
+            # True: each episode starts with Check (survey pose, find and centre the cup), as the robot's own
+            # grasp does. False: it starts wherever the arm is, so takes can begin from any pose.
+            "from_survey": from_survey,
             "dart_fraction": number_value("dart percent", dart, 0, 100) / 100,
             "num_episodes": number("num_episodes", 1, 200),
             "episode_time_s": number("episode_time_s", 3, 600),
@@ -567,6 +574,12 @@ def _check_compatible(info: dict, cfg) -> None:
     if differences:
         raise ValueError("this dataset was recorded differently, so new episodes cannot be added to it: "
                          + "; ".join(differences) + ". Record into a new dataset instead.")
+
+
+# Encode the wrist video while the take is recorded instead of writing every frame as a PNG and encoding
+# them all at End Episode. On the Pi the PNG round trip (write, read back twice, delete on the SD card) made
+# a 10 s take take 6-8 s to save; streamed, it saves in about 0.3 s, for about one core while recording.
+WRITE_OPTIONS = {"streaming_encoding": True}
 
 
 class Session:
@@ -615,13 +628,14 @@ class Session:
                 try:
                     dataset = LeRobotDataset.create(repo_id(s["dataset"]), self.cfg.grasp.fps,
                                                     features=features(self.cfg), root=path, robot_type=ROBOT_TYPE,
-                                                    use_videos=True, image_writer_threads=4)
+                                                    use_videos=True, image_writer_threads=4, **WRITE_OPTIONS)
                 except Exception:
                     shutil.rmtree(path, ignore_errors=True)
                     raise
             else:
                 _check_compatible(_info(dataset_dir(s["dataset"])), self.cfg)
-                dataset = LeRobotDataset.resume(repo_id(s["dataset"]), root=path, image_writer_threads=4)
+                dataset = LeRobotDataset.resume(repo_id(s["dataset"]), root=path, image_writer_threads=4,
+                                                **WRITE_OPTIONS)
         except Exception:
             leader.bus.disconnect(disable_torque=True)
             raise
